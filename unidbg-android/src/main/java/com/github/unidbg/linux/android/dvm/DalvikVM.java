@@ -44,6 +44,10 @@ public class DalvikVM extends BaseVM implements VM {
                 Pointer className = context.getR1Pointer();
                 String name = className.getString(0);
 
+                // fenfei
+                if(name.equals("android/app/Activity"))
+                    name = "android/app/Application";
+                // end
                 boolean notFound = notFoundClassSet.contains(name);
                 if (verbose) {
                     if (notFound) {

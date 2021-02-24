@@ -104,6 +104,10 @@ public abstract class AbstractJni implements Jni {
             }
         }
 
+        if("android/content/pm/ApplicationInfo->sourceDir:Ljava/lang/String;".equals(signature) &&
+                dvmObject instanceof ApplicationInfo) {
+            return new StringObject(vm, "sourceDir");
+        }
         throw new UnsupportedOperationException(signature);
     }
 
@@ -277,6 +281,20 @@ public abstract class AbstractJni implements Jni {
                 } catch (UnsupportedEncodingException e) {
                     throw new IllegalStateException(e);
                 }
+            case "java/lang/Integer->toString()Ljava/lang/String;":{
+                Integer iUse =  (Integer)dvmObject.getValue();
+                return new StringObject(vm, Integer.toString(iUse));
+            }
+            case "java/lang/StringBuffer->toString()Ljava/lang/String;":{
+                StringBuffer str1 = (StringBuffer) dvmObject.getValue();
+                return new StringObject(vm,str1.toString());
+            }
+            case "java/lang/StringBuffer->append(Ljava/lang/String;)Ljava/lang/StringBuffer;": {
+                StringBuffer str1 = (StringBuffer) dvmObject.getValue();
+                StringObject serviceName = vaList.getObject(0);
+                assert serviceName != null;
+                return vm.resolveClass("java/lang/StringBuffer").newObject(str1.append(serviceName.value));
+            }
             case "java/security/cert/CertificateFactory->generateCertificate(Ljava/io/InputStream;)Ljava/security/cert/Certificate;":
                 CertificateFactory factory = (CertificateFactory) dvmObject.value;
                 DvmObject<?> stream = vaList.getObject(0);
@@ -327,6 +345,10 @@ public abstract class AbstractJni implements Jni {
 
     @Override
     public DvmObject<?> callStaticObjectMethod(BaseVM vm, DvmClass dvmClass, String signature, VarArg varArg) {
+        if("com/jingdong/common/utils/BitmapkitZip->unZip(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)[B".equals(signature) ){
+            String str = "zip";
+            return new ByteArray(vm, str.getBytes());
+        }
         throw new UnsupportedOperationException(signature);
     }
 
@@ -558,7 +580,8 @@ public abstract class AbstractJni implements Jni {
                 }
         }
 
-        throw new UnsupportedOperationException(signature);
+        return null;
+        // throw new UnsupportedOperationException(signature);
     }
 
     @Override
@@ -569,6 +592,12 @@ public abstract class AbstractJni implements Jni {
     @Override
     public DvmObject<?> newObjectV(BaseVM vm, DvmClass dvmClass, String signature, VaList vaList) {
         switch (signature) {
+            case "java/lang/StringBuffer-><init>()V":{
+                return vm.resolveClass("java/lang/StringBuffer").newObject(new StringBuffer());
+            }
+            case "java/lang/Integer-><init>(I)V" :{
+                return vm.resolveClass("java/lang/Integer").newObject(new Integer(vaList.getInt(0)));
+            }
             case "java/io/ByteArrayInputStream-><init>([B)V": {
                 ByteArray array = vaList.getObject(0);
                 assert array != null;
@@ -662,10 +691,13 @@ public abstract class AbstractJni implements Jni {
                     throw new IllegalStateException(e);
                 }
             }
+            case "android/app/Application->getPackageManager()Landroid/content/pm/PackageManager;":
             case "android/content/Context->getPackageManager()Landroid/content/pm/PackageManager;":
                 return vm.resolveClass("android/content/pm/PackageManager").newObject(null);
+            case "android/app/Application->getApplicationInfo()Landroid/content/pm/ApplicationInfo;":
             case "android/content/Context->getApplicationInfo()Landroid/content/pm/ApplicationInfo;":
                 return new ApplicationInfo(vm);
+            case "android/app/Application->getPackageName()Ljava/lang/String;":
             case "android/content/Context->getPackageName()Ljava/lang/String;": {
                 String packageName = vm.getPackageName();
                 if (packageName != null) {
