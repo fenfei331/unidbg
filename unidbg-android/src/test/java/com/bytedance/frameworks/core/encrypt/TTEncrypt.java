@@ -10,9 +10,14 @@ import com.github.unidbg.arm.context.RegisterContext;
 import com.github.unidbg.debugger.DebuggerType;
 import com.github.unidbg.hook.HookContext;
 import com.github.unidbg.hook.ReplaceCallback;
-import com.github.unidbg.hook.hookzz.*;
+import com.github.unidbg.hook.hookzz.Dobby;
+import com.github.unidbg.hook.hookzz.HookEntryInfo;
+import com.github.unidbg.hook.hookzz.HookZz;
+import com.github.unidbg.hook.hookzz.IHookZz;
+import com.github.unidbg.hook.hookzz.InstrumentCallback;
+import com.github.unidbg.hook.hookzz.WrapCallback;
 import com.github.unidbg.hook.xhook.IxHook;
-import com.github.unidbg.linux.android.AndroidARMEmulator;
+import com.github.unidbg.linux.android.AndroidEmulatorBuilder;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.linux.android.XHookImpl;
 import com.github.unidbg.linux.android.dvm.DalvikModule;
@@ -39,7 +44,7 @@ public class TTEncrypt {
     TTEncrypt(boolean logging) {
         this.logging = logging;
 
-        emulator = new AndroidARMEmulator("com.qidian.dldl.official"); // 创建模拟器实例，要模拟32位或者64位，在这里区分
+        emulator = AndroidEmulatorBuilder.for32Bit().setProcessName("com.qidian.dldl.official").build(); // 创建模拟器实例，要模拟32位或者64位，在这里区分
         final Memory memory = emulator.getMemory(); // 模拟器的内存操作接口
         memory.setLibraryResolver(new AndroidResolver(23)); // 设置系统类库解析
 

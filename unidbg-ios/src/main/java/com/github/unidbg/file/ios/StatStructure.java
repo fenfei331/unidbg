@@ -33,6 +33,21 @@ public abstract class StatStructure extends UnidbgStructure {
         this.st_blocks = count;
     }
 
-    public abstract void setLastModification(long lastModified);
+    public final void setLastModification(long lastModified) {
+        long tv_sec = lastModified / 1000L;
+        long tv_nsec = (lastModified % 1000) * 1000000L;
+        setSt_atimespec(tv_sec, tv_nsec);
+        setSt_mtimespec(tv_sec, tv_nsec);
+        setSt_ctimespec(tv_sec, tv_nsec);
+        setSt_birthtimespec(tv_sec, tv_nsec);
+    }
+
+    public abstract void setSt_atimespec(long tv_sec, long tv_nsec);
+
+    public abstract void setSt_mtimespec(long tv_sec, long tv_nsec);
+
+    public abstract void setSt_ctimespec(long tv_sec, long tv_nsec);
+
+    public abstract void setSt_birthtimespec(long tv_sec, long tv_nsec);
 
 }

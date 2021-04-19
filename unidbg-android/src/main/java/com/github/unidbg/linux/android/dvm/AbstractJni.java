@@ -1,7 +1,14 @@
 package com.github.unidbg.linux.android.dvm;
 
+import com.github.unidbg.linux.android.dvm.api.ApplicationInfo;
+import com.github.unidbg.linux.android.dvm.api.AssetManager;
+import com.github.unidbg.linux.android.dvm.api.Binder;
+import com.github.unidbg.linux.android.dvm.api.Bundle;
 import com.github.unidbg.linux.android.dvm.api.ClassLoader;
-import com.github.unidbg.linux.android.dvm.api.*;
+import com.github.unidbg.linux.android.dvm.api.PackageInfo;
+import com.github.unidbg.linux.android.dvm.api.ServiceManager;
+import com.github.unidbg.linux.android.dvm.api.Signature;
+import com.github.unidbg.linux.android.dvm.api.SystemService;
 import com.github.unidbg.linux.android.dvm.array.ArrayObject;
 import com.github.unidbg.linux.android.dvm.array.ByteArray;
 import com.github.unidbg.linux.android.dvm.wrapper.DvmBoolean;
@@ -10,14 +17,24 @@ import com.github.unidbg.linux.android.dvm.wrapper.DvmLong;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 public abstract class AbstractJni implements Jni {
 
@@ -63,6 +80,16 @@ public abstract class AbstractJni implements Jni {
                 return vm.resolveClass("java/lang/Double");
         }
 
+        throw new UnsupportedOperationException(signature);
+    }
+
+    @Override
+    public boolean getStaticBooleanField(BaseVM vm, DvmClass dvmClass, DvmField dvmField) {
+        return getStaticBooleanField(vm, dvmClass, dvmField.getSignature());
+    }
+
+    @Override
+    public boolean getStaticBooleanField(BaseVM vm, DvmClass dvmClass, String signature) {
         throw new UnsupportedOperationException(signature);
     }
 
@@ -396,6 +423,26 @@ public abstract class AbstractJni implements Jni {
     }
 
     @Override
+    public byte callByteMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList) {
+        return callByteMethodV(vm, dvmObject, dvmMethod.getSignature(), vaList);
+    }
+
+    @Override
+    public byte callByteMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList) {
+        throw new UnsupportedOperationException(signature);
+    }
+
+    @Override
+    public short callShortMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList) {
+        return callShortMethodV(vm, dvmObject, dvmMethod.getSignature(), vaList);
+    }
+
+    @Override
+    public short callShortMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList) {
+        throw new UnsupportedOperationException(signature);
+    }
+
+    @Override
     public int callIntMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList) {
         return callIntMethodV(vm, dvmObject, dvmMethod.getSignature(), vaList);
     }
@@ -516,6 +563,16 @@ public abstract class AbstractJni implements Jni {
 
     @Override
     public float getFloatField(BaseVM vm, DvmObject<?> dvmObject, String signature) {
+        throw new UnsupportedOperationException(signature);
+    }
+
+    @Override
+    public float callStaticFloatMethod(BaseVM vm, DvmClass dvmClass, DvmMethod dvmMethod, VarArg varArg) {
+        return callStaticFloatMethod(vm, dvmClass, dvmMethod.getSignature(), varArg);
+    }
+
+    @Override
+    public float callStaticFloatMethod(BaseVM vm, DvmClass dvmClass, String signature, VarArg varArg) {
         throw new UnsupportedOperationException(signature);
     }
 
@@ -784,6 +841,16 @@ public abstract class AbstractJni implements Jni {
 
     @Override
     public void callVoidMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList) {
+        throw new UnsupportedOperationException(signature);
+    }
+
+    @Override
+    public void setStaticIntField(BaseVM vm, DvmClass dvmClass, DvmField dvmField, int value) {
+        setStaticIntField(vm, dvmClass, dvmField.getSignature(), value);
+    }
+
+    @Override
+    public void setStaticIntField(BaseVM vm, DvmClass dvmClass, String signature, int value) {
         throw new UnsupportedOperationException(signature);
     }
 

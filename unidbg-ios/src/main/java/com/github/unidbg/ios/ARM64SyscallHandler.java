@@ -16,9 +16,64 @@ import com.github.unidbg.file.FileIO;
 import com.github.unidbg.file.FileResult;
 import com.github.unidbg.file.ios.DarwinFileIO;
 import com.github.unidbg.file.ios.IOConstants;
-import com.github.unidbg.ios.file.*;
+import com.github.unidbg.ios.file.ByteArrayFileIO;
+import com.github.unidbg.ios.file.DriverFileIO;
+import com.github.unidbg.ios.file.LocalDarwinUdpSocket;
+import com.github.unidbg.ios.file.SocketIO;
+import com.github.unidbg.ios.file.TcpSocket;
+import com.github.unidbg.ios.file.UdpSocket;
 import com.github.unidbg.ios.struct.attr.AttrList;
-import com.github.unidbg.ios.struct.kernel.*;
+import com.github.unidbg.ios.struct.kernel.AslServerMessageRequest;
+import com.github.unidbg.ios.struct.kernel.HostGetClockServiceReply;
+import com.github.unidbg.ios.struct.kernel.HostGetClockServiceRequest;
+import com.github.unidbg.ios.struct.kernel.HostInfoReply;
+import com.github.unidbg.ios.struct.kernel.HostInfoRequest;
+import com.github.unidbg.ios.struct.kernel.IOServiceAddNotificationRequest;
+import com.github.unidbg.ios.struct.kernel.IOServiceGetMatchingServiceRequest;
+import com.github.unidbg.ios.struct.kernel.MachMsgHeader;
+import com.github.unidbg.ios.struct.kernel.MachPortOptions;
+import com.github.unidbg.ios.struct.kernel.MachPortReply;
+import com.github.unidbg.ios.struct.kernel.MachPortSetAttributesReply;
+import com.github.unidbg.ios.struct.kernel.MachPortSetAttributesRequest;
+import com.github.unidbg.ios.struct.kernel.MachPortTypeReply;
+import com.github.unidbg.ios.struct.kernel.MachPortTypeRequest;
+import com.github.unidbg.ios.struct.kernel.MachPortsLookup64Reply;
+import com.github.unidbg.ios.struct.kernel.MachTimebaseInfo;
+import com.github.unidbg.ios.struct.kernel.NotifyServerCancelReply;
+import com.github.unidbg.ios.struct.kernel.NotifyServerCancelRequest;
+import com.github.unidbg.ios.struct.kernel.NotifyServerGetStateReply;
+import com.github.unidbg.ios.struct.kernel.NotifyServerGetStateRequest;
+import com.github.unidbg.ios.struct.kernel.NotifyServerRegisterCheck64Request;
+import com.github.unidbg.ios.struct.kernel.NotifyServerRegisterCheckReply;
+import com.github.unidbg.ios.struct.kernel.NotifyServerRegisterMachPort64Request;
+import com.github.unidbg.ios.struct.kernel.NotifyServerRegisterMachPortReply;
+import com.github.unidbg.ios.struct.kernel.NotifyServerRegisterPlain64Request;
+import com.github.unidbg.ios.struct.kernel.NotifyServerRegisterPlainReply;
+import com.github.unidbg.ios.struct.kernel.ProcBsdShortInfo;
+import com.github.unidbg.ios.struct.kernel.Pthread;
+import com.github.unidbg.ios.struct.kernel.Pthread64;
+import com.github.unidbg.ios.struct.kernel.RLimit;
+import com.github.unidbg.ios.struct.kernel.SemaphoreCreateReply;
+import com.github.unidbg.ios.struct.kernel.SemaphoreCreateRequest;
+import com.github.unidbg.ios.struct.kernel.Stat64;
+import com.github.unidbg.ios.struct.kernel.StatFS;
+import com.github.unidbg.ios.struct.kernel.TaskDyldInfoReply;
+import com.github.unidbg.ios.struct.kernel.TaskGetExceptionPortsReply;
+import com.github.unidbg.ios.struct.kernel.TaskGetExceptionPortsRequest;
+import com.github.unidbg.ios.struct.kernel.TaskGetSpecialPortReply;
+import com.github.unidbg.ios.struct.kernel.TaskGetSpecialPortRequest;
+import com.github.unidbg.ios.struct.kernel.TaskInfoRequest;
+import com.github.unidbg.ios.struct.kernel.TaskSetExceptionPortsReply;
+import com.github.unidbg.ios.struct.kernel.TaskSetExceptionPortsRequest;
+import com.github.unidbg.ios.struct.kernel.TaskThreadsReply64;
+import com.github.unidbg.ios.struct.kernel.VmCopy64Request;
+import com.github.unidbg.ios.struct.kernel.VmCopyReply;
+import com.github.unidbg.ios.struct.kernel.VmReadOverwriteReply;
+import com.github.unidbg.ios.struct.kernel.VmReadOverwriteRequest;
+import com.github.unidbg.ios.struct.kernel.VmRegionRecurse64Reply;
+import com.github.unidbg.ios.struct.kernel.VmRegionRecurse64Request;
+import com.github.unidbg.ios.struct.kernel.VmRemapReply;
+import com.github.unidbg.ios.struct.kernel.VmRemapRequest;
 import com.github.unidbg.ios.struct.sysctl.IfMsgHeader;
 import com.github.unidbg.ios.struct.sysctl.KInfoProc64;
 import com.github.unidbg.ios.struct.sysctl.SockAddrDL;
@@ -59,7 +114,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
 
     private final SvcMemory svcMemory;
 
-    ARM64SyscallHandler(SvcMemory svcMemory) {
+    protected ARM64SyscallHandler(SvcMemory svcMemory) {
         super();
 
         this.svcMemory = svcMemory;
@@ -67,12 +122,12 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
 
     @SuppressWarnings("unchecked")
     @Override
-    public void hook(Backend backend, int intno, Object user) {
+    public void hook(Backend backend, int intno, int swi, Object user) {
         Emulator<DarwinFileIO> emulator = (Emulator<DarwinFileIO>) user;
         UnidbgPointer pc = UnidbgPointer.register(emulator, Arm64Const.UC_ARM64_REG_PC);
 
         if (intno == ARMEmulator.EXCP_BKPT) { // brk
-            createBreaker(emulator).brk(pc, (pc.getInt(0) >> 5) & 0xffff);
+            createBreaker(emulator).brk(pc, pc == null ? swi : (pc.getInt(0) >> 5) & 0xffff);
             return;
         }
 
@@ -80,13 +135,11 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
             throw new BackendException("intno=" + intno);
         }
 
-        final int svcNumber = (pc.getInt(-4) >> 5) & 0xffff;
-
         int NR = backend.reg_read(Arm64Const.UC_ARM64_REG_X16).intValue();
         String syscall = null;
         Throwable exception = null;
         try {
-            if (svcNumber == 0 && NR == Svc.CALLBACK_SYSCALL_NUMBER && backend.reg_read(Arm64Const.UC_ARM64_REG_X8).intValue() == 0) { // callback
+            if (swi == 0 && NR == Svc.CALLBACK_SYSCALL_NUMBER && backend.reg_read(Arm64Const.UC_ARM64_REG_X8).intValue() == 0) { // callback
                 int number = backend.reg_read(Arm64Const.UC_ARM64_REG_X4).intValue();
                 Svc svc = svcMemory.getSvc(number);
                 if (svc != null) {
@@ -94,19 +147,20 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                     return;
                 }
                 backend.emu_stop();
-                throw new IllegalStateException("svc number: " + svcNumber);
+                throw new IllegalStateException("svc number: " + swi);
             }
-            if (svcNumber != DARWIN_SWI_SYSCALL) {
-                Svc svc = svcMemory.getSvc(svcNumber);
+            if (swi != DARWIN_SWI_SYSCALL) {
+                Svc svc = svcMemory.getSvc(swi);
                 if (svc != null) {
                     backend.reg_write(Arm64Const.UC_ARM64_REG_X0, svc.handle(emulator));
                     return;
                 }
                 backend.emu_stop();
-                throw new BackendException("svc number: " + svcNumber + ", NR=" + NR + ", intno=" + intno);
+                throw new BackendException("svc number: " + swi + ", NR=" + NR + ", intno=" + intno);
             }
 
             if (log.isDebugEnabled()) {
+                log.debug("handle syscall NR=" + NR);
                 ARM.showRegs64(emulator, null);
             }
             Cpsr.getArm64(backend).setCarry(false);
@@ -115,7 +169,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
             if (isIndirect) {
                 int indirectNR = backend.reg_read(Arm64Const.UC_ARM64_REG_X0).intValue();
                 if (!handleIndirect(emulator, indirectNR)) {
-                    log.warn("handleInterrupt intno=" + intno + ", indirectNR=" + indirectNR + ", svcNumber=0x" + Integer.toHexString(svcNumber) + ", PC=" + pc);
+                    log.warn("handleInterrupt intno=" + intno + ", indirectNR=" + indirectNR + ", svcNumber=0x" + Integer.toHexString(swi) + ", PC=" + pc);
                     if (log.isDebugEnabled()) {
                         createBreaker(emulator).debug();
                     }
@@ -301,6 +355,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                 case 194:
                     backend.reg_write(Arm64Const.UC_ARM64_REG_X0, getrlimit(emulator));
                     return;
+                case 195:
+                    backend.reg_write(Arm64Const.UC_ARM64_REG_X0, setrlimit(emulator));
+                    return;
                 case 197:
                     backend.reg_write(Arm64Const.UC_ARM64_REG_X0, mmap(emulator));
                     return;
@@ -445,7 +502,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
             exception = e;
         }
 
-        log.warn("handleInterrupt intno=" + intno + ", NR=" + NR + ", svcNumber=0x" + Integer.toHexString(svcNumber) + ", PC=" + pc + ", syscall=" + syscall, exception);
+        log.warn("handleInterrupt intno=" + intno + ", NR=" + NR + ", svcNumber=0x" + Integer.toHexString(swi) + ", PC=" + pc + ", syscall=" + syscall, exception);
         if (log.isDebugEnabled()) {
             createBreaker(emulator).debug();
         }
@@ -534,6 +591,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         if (log.isDebugEnabled()) {
             log.debug("_mach_port_insert_member task=" + task + ", name=" + name + ", pset=" + pset);
         }
+        if (verbose) {
+            System.out.printf("mach_port_insert_member %d with pset=0x%x from %s%n", name, pset, emulator.getContext().getLRPointer());
+        }
         return 0;
     }
 
@@ -559,7 +619,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         Pointer pathname = context.getPointerArg(0);
         int mode = context.getIntArg(1);
         String path = pathname.getString(0);
-        if (emulator.getFileSystem().mkdir(path)) {
+        if (emulator.getFileSystem().mkdir(path, mode)) {
             if (log.isDebugEnabled()) {
                 log.debug("mkdir pathname=" + path + ", mode=" + mode);
             }
@@ -689,6 +749,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
             log.debug("_kernelrpc_mach_port_allocate_trap task=" + task + ", right=" + right + ", name=" + name);
         }
         name.setInt(0, STATIC_PORT);
+        if (verbose) {
+            System.out.printf("mach_port_allocate %d with right=0x%x from %s%n", STATIC_PORT, right, emulator.getContext().getLRPointer());
+        }
         return 0;
     }
 
@@ -884,6 +947,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         }
         DarwinFileIO io = fdMap.get(fd);
         if (io != null) {
+            if (verbose) {
+                System.out.printf("File fstatfs '%s' from %s%n", io, emulator.getContext().getLRPointer());
+            }
             return io.fstatfs(new StatFS(buf));
         }
         emulator.getMemory().setErrno(UnixEmulator.EACCES);
@@ -1004,11 +1070,17 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         if (log.isDebugEnabled()) {
             log.debug("fstat file=" + file + ", stat=" + stat);
         }
+        if (verbose) {
+            System.out.printf("File fstat '%s' from %s%n", file, emulator.getContext().getLRPointer());
+        }
         return file.fstat(emulator, new Stat64(stat));
     }
 
     private static final int RLIMIT_NOFILE = 8;		/* number of open files */
     private static final int RLIMIT_POSIX_FLAG = 0x1000;	/* Set bit for strict POSIX */
+
+    private long rlim_cur = 128;
+    private long rlim_max = 256;
 
     private int getrlimit(Emulator<?> emulator) {
         RegisterContext context = emulator.getContext();
@@ -1018,13 +1090,37 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         int type = resource & (RLIMIT_POSIX_FLAG - 1);
         String msg = "getrlimit resource=0x" + Integer.toHexString(resource) + ", rlp=" + rlp + ", posix=" + posix + ", type=" + type;
         if (type == RLIMIT_NOFILE) {
+            RLimit rLimit = new RLimit(rlp);
+            rLimit.rlim_cur = rlim_cur;
+            rLimit.rlim_max = rlim_max;
+            rLimit.pack();
             if (log.isDebugEnabled()) {
+                msg += (", rLimit=" + rLimit);
                 log.debug(msg);
             }
+            return 0;
+        } else {
+            log.info(msg);
+        }
+        return 1;
+    }
+
+    private int setrlimit(Emulator<?> emulator) {
+        RegisterContext context = emulator.getContext();
+        int resource = context.getIntArg(0);
+        Pointer rlp = context.getPointerArg(1);
+        boolean posix = (resource & RLIMIT_POSIX_FLAG) != 0;
+        int type = resource & (RLIMIT_POSIX_FLAG - 1);
+        String msg = "setrlimit resource=0x" + Integer.toHexString(resource) + ", rlp=" + rlp + ", posix=" + posix + ", type=" + type;
+        if (type == RLIMIT_NOFILE) {
             RLimit rLimit = new RLimit(rlp);
-            rLimit.rlim_cur = 128;
-            rLimit.rlim_max = 256;
-            rLimit.pack();
+            rLimit.unpack();
+            rlim_cur = rLimit.rlim_cur;
+            rlim_max = rLimit.rlim_max;
+            if (log.isDebugEnabled()) {
+                msg += (", rLimit=" + rLimit);
+                log.debug(msg);
+            }
             return 0;
         } else {
             log.info(msg);
@@ -1041,6 +1137,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         if (log.isDebugEnabled()) {
             log.debug("_kernelrpc_mach_port_mod_refs_trap task=" + task + ", name=" + name + ", right=" + right + ", delta=" + delta);
         }
+        if (verbose) {
+            System.out.printf("mach_port_mod_refs %d with right=0x%x from %s%n", name, right, emulator.getContext().getLRPointer());
+        }
         return 0;
     }
 
@@ -1052,6 +1151,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         int polyPoly = context.getIntArg(3);
         if (log.isDebugEnabled()) {
             log.debug("_kernelrpc_mach_port_insert_right_trap task=" + task + ", name=" + name + ", poly=" + poly + ", polyPoly=" + polyPoly);
+        }
+        if (verbose) {
+            System.out.printf("mach_port_insert_right %d with poly=0x%x from %s%n", name, poly, emulator.getContext().getLRPointer());
         }
         return 0;
     }
@@ -1068,6 +1170,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
             log.debug("_kernelrpc_mach_port_construct_trap task=" + task + ", options=" + options + ", context=0x" + Long.toHexString(ctx) + ", name=" + name + ", portOptions=" + portOptions);
         }
         name.setInt(0, 0x88);
+        if (verbose) {
+            System.out.printf("mach_port_construct %d from %s%n", 0x88, emulator.getContext().getLRPointer());
+        }
         return 0;
     }
 
@@ -1330,6 +1435,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                     if (log.isDebugEnabled()) {
                         createBreaker(emulator).debug();
                     }
+                    log.info("sysctl CTL_UNSPEC action=" + action + ", namelen=" + namelen + ", buffer=" + buffer + ", bufferSize=" + bufferSize + ", sub=" + sub);
                     return -1;
                 }
                 log.info("sysctl CTL_UNSPEC action=" + action + ", namelen=" + namelen + ", buffer=" + buffer + ", bufferSize=" + bufferSize + ", set0=" + set0 + ", set1=" + set1);
@@ -1426,13 +1532,15 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                             bufferSize.setLong(0, UnidbgStructure.calculateSize(TimeVal64.class));
                         }
                         if (buffer != null) {
-                            long currentTimeMillis = bootTime;
-                            long tv_sec = currentTimeMillis / 1000;
-                            long tv_usec = (currentTimeMillis % 1000) * 1000 + (bootTime / 7 % 1000);
-                            TimeVal64 timeVal = new TimeVal64(buffer);
-                            timeVal.tv_sec = tv_sec;
-                            timeVal.tv_usec = tv_usec;
-                            timeVal.pack();
+                            fillKernelBootTime(buffer);
+                        }
+                        return 0;
+                    case KERN_MAXFILESPERPROC:
+                        if (bufferSize != null) {
+                            bufferSize.setLong(0, 4);
+                        }
+                        if (buffer != null) {
+                            buffer.setInt(0, 256);
                         }
                         return 0;
                     default:
@@ -1449,7 +1557,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                 switch (action) {
                     case HW_MACHINE:
                         log.debug(msg);
-                        String machine = "iPhone6,2";
+                        String machine = getHwMachine();
                         if (bufferSize != null) {
                             bufferSize.setLong(0, machine.length() + 1);
                         }
@@ -1473,7 +1581,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                             bufferSize.setLong(0, 4);
                         }
                         if (buffer != null) {
-                            buffer.setInt(0, 2); // 2 cpus
+                            buffer.setInt(0, getHwNcpu()); // 2 cpus
                         }
                         return 0;
                     case HW_PAGESIZE:
@@ -1536,7 +1644,7 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                         int sizeOfSDL = UnidbgStructure.calculateSize(SockAddrDL.class);
                         int entrySize = UnidbgStructure.calculateSize(IfMsgHeader.class) + sizeOfSDL;
                         if (bufferSize != null) {
-                            bufferSize.setLong(0, entrySize * networkIFList.size());
+                            bufferSize.setLong(0, (long) entrySize * networkIFList.size());
                         }
                         if (buffer != null) {
                             Pointer pointer = buffer;
@@ -1579,6 +1687,17 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                 break;
         }
         return 1;
+    }
+
+    @Override
+    protected void fillKernelBootTime(Pointer buffer) {
+        long currentTimeMillis = bootTime;
+        long tv_sec = currentTimeMillis / 1000;
+        long tv_usec = (currentTimeMillis % 1000) * 1000 + (bootTime / 7 % 1000);
+        TimeVal64 timeVal = new TimeVal64(buffer);
+        timeVal.tv_sec = tv_sec;
+        timeVal.tv_usec = tv_usec;
+        timeVal.pack();
     }
 
     private long open_dprotected_np(Emulator<DarwinFileIO> emulator) {
@@ -1732,6 +1851,22 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         int size = context.getIntArg(3);
         int position = context.getIntArg(4);
         int options = context.getIntArg(5);
+        DarwinFileIO io = fdMap.get(fd);
+        if (position != 0 || (options & XATTR_CREATE) != 0 || (options & XATTR_REPLACE) != 0) {
+            log.info("fsetxattr fd=" + fd + ", name=" + name.getString(0) + ", value=" + value + ", size=" + size + ", position=" + position + ", options=0x" + Integer.toHexString(options));
+            return -1;
+        }
+        if (io != null) {
+            int ret = io.setxattr(name.getString(0), value.getByteArray(0, size));
+            if (ret == -1) {
+                log.info("fsetxattr fd=" + fd + ", name=" + name.getString(0) + ", value=" + value + ", size=" + size + ", position=" + position + ", options=0x" + Integer.toHexString(options));
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("fsetxattr fd=" + fd + ", name=" + name.getString(0) + ", value=" + value + ", size=" + size + ", position=" + position + ", options=0x" + Integer.toHexString(options));
+                }
+            }
+            return ret;
+        }
         log.info("fsetxattr fd=" + fd + ", name=" + name.getString(0) + ", value=" + value + ", size=" + size + ", position=" + position + ", options=0x" + Integer.toHexString(options));
         return 0;
     }
@@ -1842,6 +1977,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         if (log.isDebugEnabled()) {
             log.debug("_kernelrpc_mach_port_deallocate_trap task=" + task + ", name=" + name);
         }
+        if (verbose) {
+            System.out.printf("mach_port_deallocate %d from %s%n", name, emulator.getContext().getLRPointer());
+        }
         return 0;
     }
 
@@ -1915,6 +2053,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
                     reply.pack();
                     if (log.isDebugEnabled()) {
                         log.debug("task_get_special_port reply=" + reply);
+                    }
+                    if (verbose) {
+                        System.out.printf("task_get_special_port %d from %s%n", BOOTSTRAP_PORT, emulator.getContext().getLRPointer());
                     }
 
                     return MACH_MSG_SUCCESS;
@@ -2217,6 +2358,9 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
 
                 if (log.isDebugEnabled()) {
                     log.debug("mach_ports_lookup reply=" + reply);
+                }
+                if (verbose) {
+                    System.out.printf("mach_ports_lookup from %s%n", emulator.getContext().getLRPointer());
                 }
                 return MACH_MSG_SUCCESS;
             }
@@ -2709,14 +2853,15 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         return ret;
     }
 
-    private long gettimeofday(Emulator<?> emulator) {
+    protected long gettimeofday(Emulator<?> emulator) {
         EditableArm64RegisterContext context = emulator.getContext();
         long currentTimeMillis = System.currentTimeMillis();
+        long nanoTime = System.nanoTime();
         long tv_sec = currentTimeMillis / 1000;
-        long tv_usec = (currentTimeMillis % 1000) * 1000;
+        long tv_usec = (currentTimeMillis % 1000) * 1000 + nanoTime % 1000;
         context.setXLong(1, tv_usec);
         if (log.isDebugEnabled()) {
-            log.debug("gettimeofday");
+            log.debug("gettimeofday tv_sec=" + tv_sec + ", tv_usec=" + tv_usec);
         }
         return tv_sec;
     }
@@ -2728,8 +2873,8 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
         int iovcnt = context.getIntArg(2);
         if (log.isDebugEnabled()) {
             for (int i = 0; i < iovcnt; i++) {
-                Pointer iov_base = iov.getPointer(i * 16);
-                long iov_len = iov.getLong(i * 16 + 8);
+                Pointer iov_base = iov.getPointer(i * 16L);
+                long iov_len = iov.getLong(i * 16L + 8);
                 byte[] data = iov_base.getByteArray(0, (int) iov_len);
                 Inspector.inspect(data, "writev fd=" + fd + ", iov=" + iov + ", iov_base=" + iov_base);
             }
@@ -2743,8 +2888,8 @@ public class ARM64SyscallHandler extends DarwinSyscallHandler {
 
         int count = 0;
         for (int i = 0; i < iovcnt; i++) {
-            Pointer iov_base = iov.getPointer(i * 16);
-            long iov_len = iov.getLong(i * 16 + 8);
+            Pointer iov_base = iov.getPointer(i * 16L);
+            long iov_len = iov.getLong(i * 16L + 8);
             byte[] data = iov_base.getByteArray(0, (int) iov_len);
             count += file.write(data);
         }

@@ -1,6 +1,13 @@
 package com.github.unidbg.linux.android.dvm.jni;
 
-import com.github.unidbg.linux.android.dvm.*;
+import com.github.unidbg.linux.android.dvm.BaseVM;
+import com.github.unidbg.linux.android.dvm.DvmClass;
+import com.github.unidbg.linux.android.dvm.DvmField;
+import com.github.unidbg.linux.android.dvm.DvmMethod;
+import com.github.unidbg.linux.android.dvm.DvmObject;
+import com.github.unidbg.linux.android.dvm.JniFunction;
+import com.github.unidbg.linux.android.dvm.VaList;
+import com.github.unidbg.linux.android.dvm.VarArg;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -47,6 +54,18 @@ class ProxyJni extends JniFunction {
         }
 
         return super.newObjectV(vm, dvmClass, dvmMethod, vaList);
+    }
+
+    @Override
+    public float callStaticFloatMethod(BaseVM vm, DvmClass dvmClass, DvmMethod dvmMethod, VarArg varArg) {
+        try {
+            Class<?> clazz = classLoader.loadClass(dvmClass.getName());
+            ProxyCall proxyCall = ProxyUtils.findMethod(clazz, dvmMethod, varArg, true, visitor);
+            return (Float) proxyCall.call(vm, null);
+        } catch (ClassNotFoundException | IllegalAccessException | InvocationTargetException | InstantiationException | NoSuchMethodException e) {
+            log.warn("callStaticVoidMethod", e);
+        }
+        return super.callStaticFloatMethod(vm, dvmClass, dvmMethod, varArg);
     }
 
     @Override
@@ -262,6 +281,40 @@ class ProxyJni extends JniFunction {
             log.warn("callIntMethod", e);
         }
         return super.callIntMethod(vm, dvmObject, dvmMethod, varArg);
+    }
+
+    @Override
+    public byte callByteMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList) {
+        try {
+            Class<?> clazz = classLoader.loadClass(dvmObject.getObjectType().getName());
+            ProxyCall proxyCall = ProxyUtils.findMethod(clazz, dvmMethod, vaList, false, visitor);
+            Object thisObj = dvmObject.getValue();
+            if (thisObj == null) {
+                throw new IllegalStateException("obj is null: " + dvmObject);
+            }
+            Object obj = proxyCall.call(vm, thisObj);
+            return obj == null ? 0 : (Byte) obj;
+        } catch (ClassNotFoundException | IllegalAccessException | InvocationTargetException | InstantiationException | NoSuchMethodException e) {
+            log.warn("callByteMethodV", e);
+        }
+        return super.callByteMethodV(vm, dvmObject, dvmMethod, vaList);
+    }
+
+    @Override
+    public short callShortMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList) {
+        try {
+            Class<?> clazz = classLoader.loadClass(dvmObject.getObjectType().getName());
+            ProxyCall proxyCall = ProxyUtils.findMethod(clazz, dvmMethod, vaList, false, visitor);
+            Object thisObj = dvmObject.getValue();
+            if (thisObj == null) {
+                throw new IllegalStateException("obj is null: " + dvmObject);
+            }
+            Object obj = proxyCall.call(vm, thisObj);
+            return obj == null ? 0 : (Short) obj;
+        } catch (ClassNotFoundException | IllegalAccessException | InvocationTargetException | InstantiationException | NoSuchMethodException e) {
+            log.warn("callShortMethodV", e);
+        }
+        return super.callShortMethodV(vm, dvmObject, dvmMethod, vaList);
     }
 
     @Override
@@ -567,12 +620,24 @@ class ProxyJni extends JniFunction {
     }
 
     @Override
+    public boolean getStaticBooleanField(BaseVM vm, DvmClass dvmClass, DvmField dvmField) {
+        try {
+            Class<?> clazz = classLoader.loadClass(dvmClass.getName());
+            ProxyField field = ProxyUtils.findField(clazz, dvmField, visitor);
+            return field.getBoolean(null);
+        } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
+            log.warn("getStaticBooleanField", e);
+        }
+
+        return super.getStaticBooleanField(vm, dvmClass, dvmField);
+    }
+
+    @Override
     public int getStaticIntField(BaseVM vm, DvmClass dvmClass, DvmField dvmField) {
         try {
             Class<?> clazz = classLoader.loadClass(dvmClass.getName());
             ProxyField field = ProxyUtils.findField(clazz, dvmField, visitor);
-            Object obj = field.get(null);
-            return (Integer) obj;
+            return field.getInt(null);
         } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
             log.warn("getStaticIntField", e);
         }
@@ -585,12 +650,24 @@ class ProxyJni extends JniFunction {
         try {
             Class<?> clazz = classLoader.loadClass(dvmClass.getName());
             ProxyField field = ProxyUtils.findField(clazz, dvmField, visitor);
-            Object obj = field.get(null);
-            return (Long) obj;
+            return field.getLong(null);
         } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
             log.warn("getStaticLongField", e);
         }
         return super.getStaticLongField(vm, dvmClass, dvmField);
+    }
+
+    @Override
+    public void setStaticIntField(BaseVM vm, DvmClass dvmClass, DvmField dvmField, int value) {
+        try {
+            Class<?> clazz = classLoader.loadClass(dvmClass.getName());
+            ProxyField field = ProxyUtils.findField(clazz, dvmField, visitor);
+            field.setInt(null, value);
+            return;
+        } catch (ClassNotFoundException | NoSuchFieldException | IllegalAccessException e) {
+            log.warn("setStaticIntField", e);
+        }
+        super.setStaticIntField(vm, dvmClass, dvmField, value);
     }
 
     @Override

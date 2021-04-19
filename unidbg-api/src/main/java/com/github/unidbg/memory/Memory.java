@@ -4,14 +4,11 @@ import com.github.unidbg.pointer.UnidbgPointer;
 import com.github.unidbg.spi.Loader;
 import com.github.unidbg.unix.IO;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.Collection;
 
 @SuppressWarnings("unused")
 public interface Memory extends IO, Loader, StackMemory {
 
-    long HEAP_BASE = 0x8048000;
     long STACK_BASE = 0xc0000000L;
     int STACK_SIZE_OF_PAGE = 256; // 1024k
 
@@ -28,7 +25,11 @@ public interface Memory extends IO, Loader, StackMemory {
     int mprotect(long address, int length, int prot);
     int brk(long address);
 
-    MemoryBlock malloc(int length);
+    /**
+     * 分配内存
+     * @param length 大小
+     * @param runtime <code>true</code>表示使用mmap按页大小分配，相应的调用MemoryBlock.free方法则使用munmap释放，<code>false</code>表示使用libc.malloc分配，相应的调用MemoryBlock.free方法则使用libc.free释放
+     */
     MemoryBlock malloc(int length, boolean runtime);
     UnidbgPointer mmap(int length, int prot);
     int munmap(long start, int length);
@@ -37,9 +38,6 @@ public interface Memory extends IO, Loader, StackMemory {
      * set errno
      */
     void setErrno(int errno);
-
-    File dumpHeap() throws IOException;
-    File dumpStack() throws IOException;
 
     Collection<MemoryMap> getMemoryMap();
 

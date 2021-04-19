@@ -6,6 +6,8 @@ import unicorn.Unicorn;
 
 public interface Backend {
 
+    void onInitialize();
+
     void switchUserMode();
     void enableVFP();
 
@@ -31,9 +33,9 @@ public interface Backend {
     void setSingleStep(int singleStep);
     void setFastDebug(boolean fastDebug);
 
-    Unicorn.UnHook hook_add_new(CodeHook callback, long begin, long end, Object user_data) throws BackendException;
+    void hook_add_new(CodeHook callback, long begin, long end, Object user_data) throws BackendException;
 
-    Unicorn.UnHook debugger_add(DebugHook callback, long begin, long end, Object user_data) throws BackendException;
+    void debugger_add(DebugHook callback, long begin, long end, Object user_data) throws BackendException;
 
     void hook_add_new(ReadHook callback, long begin, long end, Object user_data) throws BackendException;
 
@@ -43,7 +45,7 @@ public interface Backend {
 
     void hook_add_new(InterruptHook callback, Object user_data) throws BackendException;
 
-    Unicorn.UnHook hook_add_new(BlockHook callback, long begin, long end, Object user_data) throws BackendException;
+    void hook_add_new(BlockHook callback, long begin, long end, Object user_data) throws BackendException;
 
     void emu_start(long begin, long until, long timeout, long count) throws BackendException;
 
@@ -54,5 +56,7 @@ public interface Backend {
     void context_restore(long context);
     void context_save(long context);
     long context_alloc();
+
+    int getPageSize();
 
 }

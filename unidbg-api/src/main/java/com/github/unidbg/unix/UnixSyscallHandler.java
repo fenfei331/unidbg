@@ -20,7 +20,13 @@ import org.apache.commons.logging.LogFactory;
 
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -289,7 +295,7 @@ public abstract class UnixSyscallHandler<T extends NewFileIO> implements Syscall
             emulator.getMemory().setErrno(0);
             this.fdMap.put(minFd, resolveResult.io);
             if (verbose) {
-                System.out.printf("File opened '%s' from %s%n", resolveResult.io, emulator.getContext().getLRPointer());
+                System.out.printf("File opened '%s' with oflags=0x%x from %s%n", resolveResult.io, oflags, emulator.getContext().getLRPointer());
             }
             if (fileListener != null) {
                 fileListener.onOpenSuccess(emulator, pathname, resolveResult.io);
@@ -302,7 +308,7 @@ public abstract class UnixSyscallHandler<T extends NewFileIO> implements Syscall
             emulator.getMemory().setErrno(0);
             this.fdMap.put(minFd, driverIO);
             if (verbose) {
-                System.out.printf("File opened '%s' from %s%n", driverIO, emulator.getContext().getLRPointer());
+                System.out.printf("File opened '%s' with oflags=0x%x from %s%n", driverIO, oflags, emulator.getContext().getLRPointer());
             }
             if (fileListener != null) {
                 fileListener.onOpenSuccess(emulator, pathname, driverIO);
@@ -314,9 +320,10 @@ public abstract class UnixSyscallHandler<T extends NewFileIO> implements Syscall
         if (resolveResult != null) {
             result = resolveResult;
         }
-        emulator.getMemory().setErrno(result != null ? result.errno : UnixEmulator.ENOENT);
+        int errno = result != null ? result.errno : UnixEmulator.ENOENT;
+        emulator.getMemory().setErrno(errno);
         if (verbose) {
-            System.out.printf("File opened failed '%s' from %s%n", pathname, emulator.getContext().getLRPointer());
+            System.out.printf("File opened '%s' with oflags=0x%x errno is %d from %s%n", pathname, oflags, errno, emulator.getContext().getLRPointer());
         }
         return -1;
     }

@@ -6,11 +6,15 @@ import com.dd.plist.PropertyListFormatException;
 import com.dd.plist.PropertyListParser;
 import com.github.unidbg.Emulator;
 import com.github.unidbg.Module;
+import com.github.unidbg.arm.backend.BackendFactory;
 import com.github.unidbg.file.ios.DarwinFileIO;
-import com.github.unidbg.ios.*;
+import com.github.unidbg.ios.DarwinARM64Emulator;
+import com.github.unidbg.ios.DarwinARMEmulator;
+import com.github.unidbg.ios.DarwinResolver;
+import com.github.unidbg.ios.MachOLoader;
+import com.github.unidbg.ios.MachOModule;
 import com.github.unidbg.memory.Memory;
 import com.github.unidbg.spi.SyscallHandler;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
@@ -21,6 +25,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -50,7 +55,7 @@ public abstract class IpaLoader {
     private final String bundleVersion;
     private final String bundleIdentifier;
 
-    private final String executableBundlePath;
+    protected final String executableBundlePath;
 
     IpaLoader(File ipa, File rootDir) {
         this.ipa = ipa;
@@ -71,7 +76,7 @@ public abstract class IpaLoader {
     public static final String PAYLOAD_PREFIX = "Payload";
 
     private String generateExecutableBundlePath() {
-        UUID uuid = UUID.nameUUIDFromBytes(DigestUtils.md5(appDir + "_Application"));
+        UUID uuid = UUID.nameUUIDFromBytes((appDir + "_Application").getBytes(StandardCharsets.UTF_8));
         return appDir.replace(PAYLOAD_PREFIX, APP_DIR + uuid.toString().toUpperCase()) + executable;
     }
 
@@ -126,10 +131,26 @@ public abstract class IpaLoader {
         emulator.getMemory().addHookListener(new SymbolResolver(emulator));
     }
 
+    protected final List<BackendFactory> backendFactories = new ArrayList<>(5);
+
+    public void addBackendFactory(BackendFactory backendFactory) {
+        this.backendFactories.add(backendFactory);
+    }
+
+    protected Emulator<DarwinFileIO> createEmulator(File rootDir, boolean is64Bit) throws IOException {
+        if (is64Bit) {
+            return new DarwinARM64Emulator(executableBundlePath, rootDir, backendFactories, getEnvs(rootDir)) {
+            };
+        } else {
+            return new DarwinARMEmulator(executableBundlePath, rootDir, backendFactories, getEnvs(rootDir)) {
+            };
+        }
+    }
+
     LoadedIpa load32(EmulatorConfigurator configurator, String... loads) throws IOException {
         String bundleAppDir = new File(executableBundlePath).getParentFile().getParentFile().getPath();
         File rootDir = new File(this.rootDir, bundleVersion);
-        Emulator<DarwinFileIO> emulator = new DarwinARMEmulator(executableBundlePath, rootDir, getEnvs(rootDir));
+        Emulator<DarwinFileIO> emulator = createEmulator(rootDir, false);
         emulator.getSyscallHandler().setVerbose(log.isDebugEnabled());
         if (configurator != null) {
             configurator.configure(emulator, executableBundlePath, rootDir, bundleIdentifier);
@@ -143,7 +164,7 @@ public abstract class IpaLoader {
     LoadedIpa load64(EmulatorConfigurator configurator, String... loads) throws IOException {
         String bundleAppDir = new File(executableBundlePath).getParentFile().getParentFile().getPath();
         File rootDir = new File(this.rootDir, bundleVersion);
-        Emulator<DarwinFileIO> emulator = new DarwinARM64Emulator(executableBundlePath, rootDir, getEnvs(rootDir));
+        Emulator<DarwinFileIO> emulator = createEmulator(rootDir, true);
         emulator.getSyscallHandler().setVerbose(log.isDebugEnabled());
         if (configurator != null) {
             configurator.configure(emulator, executableBundlePath, rootDir, bundleIdentifier);
@@ -160,13 +181,13 @@ public abstract class IpaLoader {
         if (log.isDebugEnabled()) {
             list.add("OBJC_HELP=YES"); // describe available environment variables
 //            list.add("OBJC_PRINT_OPTIONS=YES"); // list which options are set
-//            list.add("OBJC_PRINT_INITIALIZE_METHODS=YES"); // log calls to class +initialize methods
             list.add("OBJC_PRINT_CLASS_SETUP=YES"); // log progress of class and category setup
+//            list.add("OBJC_PRINT_INITIALIZE_METHODS=YES"); // log calls to class +initialize methods
             list.add("OBJC_PRINT_PROTOCOL_SETUP=YES"); // log progress of protocol setup
             list.add("OBJC_PRINT_IVAR_SETUP=YES"); // log processing of non-fragile ivars
             list.add("OBJC_PRINT_VTABLE_SETUP=YES"); // log processing of class vtables
         }
-        UUID uuid = UUID.nameUUIDFromBytes(DigestUtils.md5(appDir + "_Documents"));
+        UUID uuid = UUID.nameUUIDFromBytes((appDir + "_Documents").getBytes(StandardCharsets.UTF_8));
         String homeDir = "/var/mobile/Containers/Data/Application/" + uuid.toString().toUpperCase();
         list.add("CFFIXED_USER_HOME=" + homeDir);
         FileUtils.forceMkdir(new File(rootDir, homeDir));

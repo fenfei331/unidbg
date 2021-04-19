@@ -1,8 +1,12 @@
 package com.sun.jna;
 
-import com.github.unidbg.*;
+import com.github.unidbg.AndroidEmulator;
+import com.github.unidbg.Emulator;
+import com.github.unidbg.LibraryResolver;
+import com.github.unidbg.Module;
+import com.github.unidbg.Symbol;
 import com.github.unidbg.arm.HookStatus;
-import com.github.unidbg.arm.backend.dynarmic.DynarmicLoader;
+import com.github.unidbg.arm.backend.DynarmicFactory;
 import com.github.unidbg.arm.context.RegisterContext;
 import com.github.unidbg.hook.HookContext;
 import com.github.unidbg.hook.ReplaceCallback;
@@ -13,10 +17,13 @@ import com.github.unidbg.hook.hookzz.InstrumentCallback;
 import com.github.unidbg.hook.whale.IWhale;
 import com.github.unidbg.hook.whale.Whale;
 import com.github.unidbg.hook.xhook.IxHook;
-import com.github.unidbg.linux.android.AndroidARMEmulator;
+import com.github.unidbg.linux.android.AndroidEmulatorBuilder;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.linux.android.XHookImpl;
-import com.github.unidbg.linux.android.dvm.*;
+import com.github.unidbg.linux.android.dvm.DalvikModule;
+import com.github.unidbg.linux.android.dvm.DvmClass;
+import com.github.unidbg.linux.android.dvm.DvmObject;
+import com.github.unidbg.linux.android.dvm.VM;
 import com.github.unidbg.linux.android.dvm.jni.ProxyClassFactory;
 import com.github.unidbg.memory.Memory;
 import com.github.unidbg.memory.MemoryBlock;
@@ -33,17 +40,16 @@ public class JniDispatch32 {
     }
 
     private static AndroidEmulator createARMEmulator() {
-        return new AndroidARMEmulator("com.sun.jna");
+        return AndroidEmulatorBuilder.for32Bit()
+                .setProcessName("com.sun.jna")
+                .addBackendFactory(new DynarmicFactory(true))
+                .build();
     }
 
     private final AndroidEmulator emulator;
     private final Module module;
 
     private final DvmClass cNative;
-
-    static {
-        DynarmicLoader.useDynarmic();
-    }
 
     private JniDispatch32() {
         emulator = createARMEmulator();
@@ -60,9 +66,16 @@ public class JniDispatch32 {
         cNative = vm.resolveClass("com/sun/jna/Native");
 
         Symbol __system_property_get = module.findSymbolByName("__system_property_get", true);
-        MemoryBlock block = memory.malloc(0x10);
-        Number ret = __system_property_get.call(emulator, "ro.build.version.sdk", block.getPointer())[0];
-        System.out.println("sdk=" + new String(block.getPointer().getByteArray(0, ret.intValue())) + ", libc=" + memory.findModule("libc.so"));
+        MemoryBlock block = null;
+        try {
+            block = memory.malloc(0x10, false);
+            Number ret = __system_property_get.call(emulator, "ro.build.version.sdk", block.getPointer())[0];
+            System.out.println("sdk=" + new String(block.getPointer().getByteArray(0, ret.intValue())) + ", libc=" + memory.findModule("libc.so"));
+        } finally {
+            if (block != null) {
+                block.free();
+            }
+        }
     }
 
     private void destroy() throws IOException {

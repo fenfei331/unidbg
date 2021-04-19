@@ -6,7 +6,13 @@ import com.github.unidbg.file.FileResult;
 import com.github.unidbg.file.ios.DarwinFileIO;
 import com.github.unidbg.file.ios.IOConstants;
 import com.github.unidbg.ios.struct.VMStatistics;
-import com.github.unidbg.ios.struct.kernel.*;
+import com.github.unidbg.ios.struct.kernel.HostStatisticsReply;
+import com.github.unidbg.ios.struct.kernel.HostStatisticsRequest;
+import com.github.unidbg.ios.struct.kernel.MachMsgHeader;
+import com.github.unidbg.ios.struct.kernel.StatFS;
+import com.github.unidbg.ios.struct.kernel.VprocMigLookupData;
+import com.github.unidbg.ios.struct.kernel.VprocMigLookupReply;
+import com.github.unidbg.ios.struct.kernel.VprocMigLookupRequest;
 import com.github.unidbg.pointer.UnidbgPointer;
 import com.github.unidbg.pointer.UnidbgStructure;
 import com.github.unidbg.spi.SyscallHandler;
@@ -24,6 +30,25 @@ abstract class DarwinSyscallHandler extends UnixSyscallHandler<DarwinFileIO> imp
     private static final Log log = LogFactory.getLog(DarwinSyscallHandler.class);
 
     final long bootTime = System.currentTimeMillis();
+
+    /**
+     * sysctl hw.machine
+     */
+    protected String getHwMachine() {
+        return "iPhone6,2";
+    }
+
+    /**
+     * sysctl hw.ncpu
+     */
+    protected int getHwNcpu() {
+        return 2;
+    }
+
+    /**
+     * sysctl kern.boottime
+     */
+    protected abstract void fillKernelBootTime(Pointer buffer);
 
     protected final void exit(Emulator<?> emulator) {
         RegisterContext context = emulator.getContext();
@@ -81,21 +106,21 @@ abstract class DarwinSyscallHandler extends UnixSyscallHandler<DarwinFileIO> imp
         if (log.isDebugEnabled()) {
             log.debug("access pathname=" + path + ", mode=" + mode);
         }
-        return faccessat(emulator, path);
+        return faccessat(emulator, path, mode);
     }
 
-    protected final int faccessat(Emulator<DarwinFileIO> emulator, String pathname) {
+    protected final int faccessat(Emulator<DarwinFileIO> emulator, String pathname, int mode) {
         FileResult<?> result = resolve(emulator, pathname, IOConstants.O_RDONLY);
         if (result != null && result.isSuccess()) {
             if (verbose) {
-                System.out.println(String.format("File access '%s' from %s", pathname, emulator.getContext().getLRPointer()));
+                System.out.printf("File access '%s' with mode=0x%x from %s%n", pathname, mode, emulator.getContext().getLRPointer());
             }
             return 0;
         }
 
         emulator.getMemory().setErrno(result != null ? result.errno : UnixEmulator.ENOENT);
         if (verbose) {
-            System.out.println(String.format("File access failed '%s' from %s", pathname, emulator.getContext().getLRPointer()));
+            System.out.printf("File access failed '%s' with mode=0x%x from %s%n", pathname, mode, emulator.getContext().getLRPointer());
         }
         return -1;
     }

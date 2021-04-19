@@ -9,6 +9,8 @@ import org.apache.commons.logging.LogFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 public abstract class BaseFileSystem<T extends NewFileIO> implements FileSystem<T> {
 
@@ -97,10 +99,10 @@ public abstract class BaseFileSystem<T extends NewFileIO> implements FileSystem<
     }
 
     @Override
-    public boolean mkdir(String path) {
+    public boolean mkdir(String path, int mode) {
         File dir = new File(rootDir, path);
         if (emulator.getSyscallHandler().isVerbose()) {
-            System.out.printf("mkdir '%s'%n", path);
+            System.out.printf("mkdir '%s' with mode 0x%x from %s%n", path, mode, emulator.getContext().getLRPointer());
         }
 
         if (dir.exists()) {
@@ -116,7 +118,7 @@ public abstract class BaseFileSystem<T extends NewFileIO> implements FileSystem<
         FileUtils.deleteQuietly(dir);
 
         if (emulator.getSyscallHandler().isVerbose()) {
-            System.out.printf("rmdir '%s'%n", path);
+            System.out.printf("rmdir '%s' from %s%n", path, emulator.getContext().getLRPointer());
         }
     }
 
@@ -127,14 +129,14 @@ public abstract class BaseFileSystem<T extends NewFileIO> implements FileSystem<
     protected abstract boolean hasExcl(int oflags);
 
     @Override
-    public final void unlink(String path) {
+    public void unlink(String path) {
         File file = new File(rootDir, path);
         FileUtils.deleteQuietly(file);
         if (log.isDebugEnabled()) {
             log.debug("unlink path=" + path + ", file=" + file);
         }
         if (emulator.getSyscallHandler().isVerbose()) {
-            System.out.printf("unlink '%s'%n", path);
+            System.out.printf("unlink '%s' from %s%n", path, emulator.getContext().getLRPointer());
         }
     }
 
@@ -156,14 +158,17 @@ public abstract class BaseFileSystem<T extends NewFileIO> implements FileSystem<
     public int rename(String oldPath, String newPath) {
         File oldFile = new File(rootDir, oldPath);
         File newFile = new File(rootDir, newPath);
+
         try {
             FileUtils.forceMkdir(newFile.getParentFile());
+
+            Files.move(oldFile.toPath(), newFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+            if (emulator.getSyscallHandler().isVerbose()) {
+                System.out.printf("rename '%s' to '%s' from %s%n", oldPath, newPath, emulator.getContext().getLRPointer());
+            }
         } catch (IOException e) {
             throw new IllegalStateException(e);
-        }
-
-        if (!oldFile.renameTo(newFile)) {
-            throw new IllegalStateException("rename failed: old=" + oldFile + ", new=" + newFile);
         }
         return 0;
     }

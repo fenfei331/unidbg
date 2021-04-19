@@ -15,10 +15,15 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
-import java.util.Arrays;
 
 public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
 
@@ -26,7 +31,22 @@ public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
 
     protected final File file;
     protected final String path;
-    private final RandomAccessFile randomAccessFile;
+    private RandomAccessFile _randomAccessFile;
+
+    private synchronized RandomAccessFile checkOpenFile() {
+        try {
+            if (_randomAccessFile == null) {
+                FileUtils.forceMkdir(file.getParentFile());
+                if (!file.exists() && !file.createNewFile()) {
+                    throw new IOException("createNewFile failed: " + file);
+                }
+                _randomAccessFile = new RandomAccessFile(file, "rws");
+            }
+            return _randomAccessFile;
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     public SimpleFileIO(int oflags, File file, String path) {
         super(oflags);
@@ -36,22 +56,14 @@ public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
         if (file.isDirectory()) {
             throw new IllegalArgumentException("file is directory: " + file);
         }
-
-        try {
-            FileUtils.forceMkdir(file.getParentFile());
-            if (!file.exists() && !file.createNewFile()) {
-                throw new IOException("createNewFile failed: " + file);
-            }
-
-            randomAccessFile = new RandomAccessFile(file, "rws");
-        } catch (IOException e) {
-            throw new IllegalStateException("process file failed: " + file.getAbsolutePath(), e);
+        if (!file.exists()) {
+            throw new IllegalArgumentException("file not exists: " + file);
         }
     }
 
     @Override
     public void close() {
-        IOUtils.closeQuietly(randomAccessFile);
+        IOUtils.closeQuietly(_randomAccessFile);
 
         if (debugStream != null) {
             try {
@@ -73,6 +85,7 @@ public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
                 Inspector.inspect(data, "write");
             }
 
+            RandomAccessFile randomAccessFile = checkOpenFile();
             if ((oflags & IOConstants.O_APPEND) != 0) {
                 randomAccessFile.seek(randomAccessFile.length());
             }
@@ -91,14 +104,17 @@ public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
 
     @Override
     public int read(Backend backend, Pointer pointer, final int _count) {
+        RandomAccessFile randomAccessFile = checkOpenFile();
         return Utils.readFile(randomAccessFile, pointer, _count);
     }
 
     @Override
     protected byte[] getMmapData(int offset, int length) throws IOException {
+        RandomAccessFile randomAccessFile = checkOpenFile();
         randomAccessFile.seek(offset);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(length);
-        byte[] buf = new byte[10240];
+        int remaining = (int) (randomAccessFile.length() - randomAccessFile.getFilePointer());
+        ByteArrayOutputStream baos = remaining <= 0 ? new ByteArrayOutputStream() : new ByteArrayOutputStream(Math.min(length, remaining));
+        byte[] buf = new byte[1024];
         do {
             int count = length - baos.size();
             if (count == 0) {
@@ -145,6 +161,7 @@ public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
     @Override
     public int lseek(int offset, int whence) {
         try {
+            RandomAccessFile randomAccessFile = checkOpenFile();
             switch (whence) {
                 case SEEK_SET:
                     randomAccessFile.seek(offset);
@@ -166,6 +183,7 @@ public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
     @Override
     public int llseek(long offset, Pointer result, int whence) {
         try {
+            RandomAccessFile randomAccessFile = checkOpenFile();
             switch (whence) {
                 case SEEK_SET:
                     randomAccessFile.seek(offset);
@@ -221,6 +239,11 @@ public class SimpleFileIO extends BaseDarwinFileIO implements FileIO {
     @Override
     public int listxattr(Pointer namebuf, int size, int options) {
         return listxattr(file, namebuf, size);
+    }
+
+    @Override
+    public int setxattr(String name, byte[] data) {
+        return setxattr(file, name, data);
     }
 
     @Override

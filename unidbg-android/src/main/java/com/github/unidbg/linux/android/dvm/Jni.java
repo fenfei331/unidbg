@@ -2,6 +2,9 @@ package com.github.unidbg.linux.android.dvm;
 
 public interface Jni {
 
+    float callStaticFloatMethod(BaseVM vm, DvmClass dvmClass, DvmMethod dvmMethod, VarArg varArg);
+    float callStaticFloatMethod(BaseVM vm, DvmClass dvmClass, String signature, VarArg varArg);
+
     void callStaticVoidMethod(BaseVM vm, DvmClass dvmClass, DvmMethod dvmMethod, VarArg varArg);
     void callStaticVoidMethod(BaseVM vm, DvmClass dvmClass, String signature, VarArg varArg);
 
@@ -55,6 +58,12 @@ public interface Jni {
     int callIntMethod(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VarArg varArg);
     int callIntMethod(BaseVM vm, DvmObject<?> dvmObject, String signature, VarArg varArg);
 
+    byte callByteMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList);
+    byte callByteMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList);
+
+    short callShortMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList);
+    short callShortMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList);
+
     int callIntMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList);
     int callIntMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList);
 
@@ -72,6 +81,9 @@ public interface Jni {
 
     DvmObject<?> callObjectMethodV(BaseVM vm, DvmObject<?> dvmObject, DvmMethod dvmMethod, VaList vaList);
     DvmObject<?> callObjectMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList);
+
+    boolean getStaticBooleanField(BaseVM vm, DvmClass dvmClass, DvmField dvmField);
+    boolean getStaticBooleanField(BaseVM vm, DvmClass dvmClass, String signature);
 
     int getStaticIntField(BaseVM vm, DvmClass dvmClass, DvmField dvmField);
     int getStaticIntField(BaseVM vm, DvmClass dvmClass, String signature);
@@ -108,6 +120,9 @@ public interface Jni {
 
     void setObjectField(BaseVM vm, DvmObject<?> dvmObject, DvmField dvmField, DvmObject<?> value);
     void setObjectField(BaseVM vm, DvmObject<?> dvmObject, String signature, DvmObject<?> value);
+
+    void setStaticIntField(BaseVM vm, DvmClass dvmClass, DvmField dvmField, int value);
+    void setStaticIntField(BaseVM vm, DvmClass dvmClass, String signature, int value);
 
     void setStaticLongField(BaseVM vm, DvmClass dvmClass, DvmField dvmField, long value);
     void setStaticLongField(BaseVM vm, DvmClass dvmClass, String signature, long value);

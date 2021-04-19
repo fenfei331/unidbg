@@ -3,8 +3,10 @@ package org.telegram.messenger;
 import com.github.unidbg.AndroidEmulator;
 import com.github.unidbg.LibraryResolver;
 import com.github.unidbg.Module;
-import com.github.unidbg.arm.backend.dynarmic.DynarmicLoader;
-import com.github.unidbg.linux.android.AndroidARM64Emulator;
+import com.github.unidbg.arm.backend.DynarmicFactory;
+import com.github.unidbg.arm.backend.HypervisorFactory;
+import com.github.unidbg.arm.backend.KvmFactory;
+import com.github.unidbg.linux.android.AndroidEmulatorBuilder;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.linux.android.dvm.DalvikModule;
 import com.github.unidbg.linux.android.dvm.DvmClass;
@@ -15,18 +17,25 @@ import com.github.unidbg.memory.Memory;
 import com.github.unidbg.utils.Inspector;
 import com.github.unidbg.virtualmodule.android.AndroidModule;
 import com.github.unidbg.virtualmodule.android.JniGraphics;
+import junit.framework.TestCase;
 
 import java.io.File;
 import java.io.IOException;
 
-public class Utilities64 {
+public class Utilities64 extends TestCase {
 
     private static LibraryResolver createLibraryResolver() {
         return new AndroidResolver(23);
     }
 
     private static AndroidEmulator createARMEmulator() {
-        return new AndroidARM64Emulator("org.telegram.messenger");
+        return AndroidEmulatorBuilder
+                .for64Bit()
+                .setProcessName("org.telegram.messenger")
+                .addBackendFactory(new HypervisorFactory(true))
+                .addBackendFactory(new DynarmicFactory(true))
+                .addBackendFactory(new KvmFactory(true))
+                .build();
     }
 
     private final AndroidEmulator emulator;
@@ -34,11 +43,7 @@ public class Utilities64 {
 
     private final DvmClass cUtilities;
 
-    static {
-        DynarmicLoader.useDynarmic();
-    }
-
-    private Utilities64() {
+    public Utilities64() {
         emulator = createARMEmulator();
         final Memory memory = emulator.getMemory();
         memory.setLibraryResolver(createLibraryResolver());
@@ -50,7 +55,8 @@ public class Utilities64 {
         new AndroidModule(emulator, vm).register(memory);
 
         vm.setVerbose(true);
-        DalvikModule dm = vm.loadLibrary(new File("unidbg-android/src/test/resources/example_binaries/arm64-v8a/libtmessages.29.so"), true);
+        File file = new File("src/test/resources/example_binaries/arm64-v8a/libtmessages.29.so");
+        DalvikModule dm = vm.loadLibrary(file.canRead() ? file : new File("unidbg-android/src/test/resources/example_binaries/arm64-v8a/libtmessages.29.so"), true);
         dm.callJNI_OnLoad(emulator);
 
         cUtilities = vm.resolveClass("org/telegram/messenger/Utilities");
@@ -61,8 +67,30 @@ public class Utilities64 {
         System.out.println("destroy");
     }
 
+    public void test() throws Exception {
+        this.aesCbcEncryptionByteArray();
+        this.aesCtrDecryptionByteArray();
+        this.pbkdf2();
+    }
+
+    @Override
+    protected void tearDown() throws Exception {
+        super.tearDown();
+
+        destroy();
+    }
+
     public static void main(String[] args) throws Exception {
-        Utilities64 test = new Utilities64();
+        final Utilities64 test = new Utilities64();
+
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                test.pbkdf2();
+            }
+        });
+        thread.start();
+        thread.join();
 
         test.aesCbcEncryptionByteArray();
         test.aesCtrDecryptionByteArray();
@@ -92,7 +120,7 @@ public class Utilities64 {
                 vm.addLocalObject(new ByteArray(vm, key)),
                 vm.addLocalObject(new ByteArray(vm, iv)),
                 0, data.length(), 0);
-        Inspector.inspect(data.getValue(), "aesCtrDecryptionByteArray offset=" + (System.currentTimeMillis() - start) + "ms");
+        Inspector.inspect(data.getValue(), "[" + emulator.getBackend() + "]aesCtrDecryptionByteArray offset=" + (System.currentTimeMillis() - start) + "ms");
     }
 
     private void pbkdf2() {
@@ -104,7 +132,7 @@ public class Utilities64 {
             cUtilities.callStaticJniMethod(emulator, "pbkdf2([B[B[BI)V", vm.addLocalObject(new ByteArray(vm, password)),
                     vm.addLocalObject(new ByteArray(vm, salt)),
                     vm.addLocalObject(dst), 100000);
-            Inspector.inspect(dst.getValue(), "pbkdf2 offset=" + (System.currentTimeMillis() - start) + "ms");
+            Inspector.inspect(dst.getValue(), "[" + Thread.currentThread().getName() + "]pbkdf2 offset=" + (System.currentTimeMillis() - start) + "ms");
         }
     }
 

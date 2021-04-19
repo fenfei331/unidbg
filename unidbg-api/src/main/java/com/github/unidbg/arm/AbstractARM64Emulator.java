@@ -5,6 +5,7 @@ import com.github.unidbg.AbstractEmulator;
 import com.github.unidbg.Family;
 import com.github.unidbg.Module;
 import com.github.unidbg.arm.backend.Backend;
+import com.github.unidbg.arm.backend.BackendFactory;
 import com.github.unidbg.arm.backend.EventMemHook;
 import com.github.unidbg.arm.context.BackendArm64RegisterContext;
 import com.github.unidbg.arm.context.RegisterContext;
@@ -32,6 +33,7 @@ import java.io.File;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Collection;
 
 public abstract class AbstractARM64Emulator<T extends NewFileIO> extends AbstractEmulator<T> implements ARMEmulator<T> {
 
@@ -40,12 +42,12 @@ public abstract class AbstractARM64Emulator<T extends NewFileIO> extends Abstrac
     protected final Memory memory;
     private final UnixSyscallHandler<T> syscallHandler;
 
-    public static final long LR = 0xffffff80001f0000L;
+    public static final long LR = 0x7ffff0000L;
 
     private final Dlfcn dlfcn;
 
-    public AbstractARM64Emulator(String processName, File rootDir, Family family, String... envs) {
-        super(true, processName, 0xfffe0000L, 0x10000, rootDir, family);
+    public AbstractARM64Emulator(String processName, File rootDir, Family family, Collection<BackendFactory> backendFactories, String... envs) {
+        super(true, processName, 0xfffe0000L, 0x10000, rootDir, family, backendFactories);
 
         backend.switchUserMode();
 
@@ -83,7 +85,7 @@ public abstract class AbstractARM64Emulator<T extends NewFileIO> extends Abstrac
     }
 
     protected void setupTraps() {
-        int size = 0x10000;
+        int size = getPageAlign();
         backend.mem_map(LR, size, UnicornConst.UC_PROT_READ | UnicornConst.UC_PROT_EXEC);
         ByteBuffer buffer = ByteBuffer.allocate(size);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
@@ -205,7 +207,7 @@ public abstract class AbstractARM64Emulator<T extends NewFileIO> extends Abstrac
     }
 
     @Override
-    public int getPageAlign() {
+    protected int getPageAlignInternal() {
         return PAGE_ALIGN;
     }
 
@@ -250,7 +252,7 @@ public abstract class AbstractARM64Emulator<T extends NewFileIO> extends Abstrac
         long spBackup = memory.getStackPoint();
         try {
             backend.reg_write(Arm64Const.UC_ARM64_REG_LR, LR);
-            emulate(begin, until, traceInstruction ? 0 : timeout, true);
+            emulate(begin, until, timeout, true);
         } finally {
             memory.setStackPoint(spBackup);
         }

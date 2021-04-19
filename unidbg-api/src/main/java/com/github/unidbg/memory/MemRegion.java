@@ -29,10 +29,6 @@ public class MemRegion implements Comparable<MemRegion> {
                 throw new UnsupportedOperationException();
             }
             @Override
-            public byte[] readToByteArray() {
-                throw new UnsupportedOperationException();
-            }
-            @Override
             public ByteBuffer mapBuffer() {
                 throw new UnsupportedOperationException();
             }
@@ -56,7 +52,10 @@ public class MemRegion implements Comparable<MemRegion> {
     }
 
     public byte[] readLibrary() throws IOException {
-        return libraryFile.readToByteArray();
+        ByteBuffer buffer = libraryFile.mapBuffer();
+        byte[] data = new byte[buffer.remaining()];
+        buffer.get(data);
+        return data;
     }
 
     @Override

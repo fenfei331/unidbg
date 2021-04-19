@@ -5,18 +5,14 @@ import com.github.unidbg.LibraryResolver;
 import com.github.unidbg.Module;
 import com.github.unidbg.arm.ARM;
 import com.github.unidbg.arm.backend.Backend;
-import com.github.unidbg.arm.backend.dynarmic.DynarmicLoader;
-import com.github.unidbg.linux.android.AndroidARMEmulator;
+import com.github.unidbg.arm.backend.DynarmicFactory;
+import com.github.unidbg.linux.android.AndroidEmulatorBuilder;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.virtualmodule.android.AndroidModule;
 
 import java.io.File;
 
 public class McToTest extends EmulatorTest<AndroidEmulator> {
-
-    static {
-        DynarmicLoader.useDynarmic();
-    }
 
     public static void main(String[] args) throws Exception {
         McToTest test = new McToTest();
@@ -30,7 +26,7 @@ public class McToTest extends EmulatorTest<AndroidEmulator> {
         return new AndroidResolver(19);
     }
 
-    public void testMcTo() throws Exception {
+    public void testMcTo() {
         long start = System.currentTimeMillis();
         Backend backend = emulator.getBackend();
         new AndroidModule(emulator, emulator.createDalvikVM(null)).register(emulator.getMemory());
@@ -45,6 +41,8 @@ public class McToTest extends EmulatorTest<AndroidEmulator> {
 
     @Override
     protected AndroidEmulator createARMEmulator() {
-        return new AndroidARMEmulator();
+        return AndroidEmulatorBuilder.for32Bit()
+                .addBackendFactory(new DynarmicFactory(true))
+                .build();
     }
 }

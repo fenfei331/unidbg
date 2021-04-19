@@ -1,6 +1,11 @@
 package com.github.unidbg.ios;
 
-import com.github.unidbg.*;
+import com.github.unidbg.Alignment;
+import com.github.unidbg.Emulator;
+import com.github.unidbg.Module;
+import com.github.unidbg.Symbol;
+import com.github.unidbg.Utils;
+import com.github.unidbg.arm.ARM;
 import com.github.unidbg.hook.HookListener;
 import com.github.unidbg.ios.struct.DyldUnwindSections;
 import com.github.unidbg.memory.MemRegion;
@@ -20,7 +25,15 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class MachOModule extends Module implements com.github.unidbg.ios.MachO {
 
@@ -201,17 +214,27 @@ public class MachOModule extends Module implements com.github.unidbg.ios.MachO {
 //        return emulator.eFunc(machHeader + entryPoint, argc, argvPointer)[0].intValue();
     }
 
-    final void doInitialization(Emulator<?> emulator) {
-        if (loader.executableModule == null) {
-            vars.setPointer(0, UnidbgPointer.pointer(emulator, machHeader)); // _NSGetMachExecuteHeader
-        }
+    private boolean initialized;
 
-        callRoutines(emulator);
-        for (Module module : neededLibraries.values()) {
-            MachOModule mm = (MachOModule) module;
-            mm.doInitialization(emulator);
+    final void doInitialization(Emulator<?> emulator) {
+        try {
+            if (initialized) {
+                return;
+            }
+
+            if (loader.executableModule == null) {
+                vars.setPointer(0, UnidbgPointer.pointer(emulator, machHeader)); // _NSGetMachExecuteHeader
+            }
+
+            callRoutines(emulator);
+            for (Module module : neededLibraries.values()) {
+                MachOModule mm = (MachOModule) module;
+                mm.doInitialization(emulator);
+            }
+            callInitFunction(emulator);
+        } finally {
+            initialized = true;
         }
-        callInitFunction(emulator);
     }
 
     final void callRoutines(Emulator<?> emulator) {
@@ -521,7 +544,7 @@ public class MachOModule extends Module implements com.github.unidbg.ios.MachO {
         });
         UnidbgPointer first = list.get(0);
         UnidbgPointer last = list.get(list.size() - 1);
-        Alignment alignment = emulator.align(first.peer, last.peer - first.peer);
+        Alignment alignment = ARM.align(first.peer, last.peer - first.peer, emulator.getPageAlign());
         final long base = alignment.address;
         final long size = alignment.size;
 

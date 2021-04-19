@@ -4,11 +4,11 @@ import com.github.unidbg.Emulator;
 import com.github.unidbg.LibraryResolver;
 import com.github.unidbg.Module;
 import com.github.unidbg.arm.HookStatus;
-import com.github.unidbg.arm.backend.dynarmic.DynarmicLoader;
+import com.github.unidbg.arm.backend.DynarmicFactory;
 import com.github.unidbg.arm.context.RegisterContext;
 import com.github.unidbg.hook.ReplaceCallback;
 import com.github.unidbg.hook.xhook.IxHook;
-import com.github.unidbg.linux.android.AndroidARMEmulator;
+import com.github.unidbg.linux.android.AndroidEmulatorBuilder;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.linux.android.XHookImpl;
 import com.github.unidbg.memory.Memory;
@@ -22,10 +22,6 @@ import java.io.IOException;
 
 public class CrackMe {
 
-    static {
-        DynarmicLoader.useDynarmic();
-    }
-
     public static void main(String[] args) throws IOException {
         new CrackMe().crack();
     }
@@ -34,9 +30,13 @@ public class CrackMe {
     private final Module module;
     private final File executable;
 
-    public CrackMe() throws IOException {
+    public CrackMe() {
         executable = new File("unidbg-android/src/test/resources/example_binaries/crackme1");
-        emulator = new AndroidARMEmulator(executable.getName(), new File("target/rootfs"));
+        emulator = AndroidEmulatorBuilder.for32Bit()
+                .setProcessName(executable.getName())
+                .setRootDir(new File("target/rootfs"))
+                .addBackendFactory(new DynarmicFactory(true))
+                .build();
         Memory memory = emulator.getMemory();
         LibraryResolver resolver = new AndroidResolver(19);
         memory.setLibraryResolver(resolver);

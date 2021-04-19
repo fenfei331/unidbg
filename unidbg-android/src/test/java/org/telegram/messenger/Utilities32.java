@@ -3,8 +3,9 @@ package org.telegram.messenger;
 import com.github.unidbg.AndroidEmulator;
 import com.github.unidbg.LibraryResolver;
 import com.github.unidbg.Module;
-import com.github.unidbg.arm.backend.dynarmic.DynarmicLoader;
-import com.github.unidbg.linux.android.AndroidARMEmulator;
+import com.github.unidbg.arm.backend.DynarmicFactory;
+import com.github.unidbg.arm.backend.KvmFactory;
+import com.github.unidbg.linux.android.AndroidEmulatorBuilder;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.linux.android.dvm.DalvikModule;
 import com.github.unidbg.linux.android.dvm.DvmClass;
@@ -15,18 +16,24 @@ import com.github.unidbg.memory.Memory;
 import com.github.unidbg.utils.Inspector;
 import com.github.unidbg.virtualmodule.android.AndroidModule;
 import com.github.unidbg.virtualmodule.android.JniGraphics;
+import junit.framework.TestCase;
 
 import java.io.File;
 import java.io.IOException;
 
-public class Utilities32 {
+public class Utilities32 extends TestCase {
 
     private static LibraryResolver createLibraryResolver() {
         return new AndroidResolver(23);
     }
 
     private static AndroidEmulator createARMEmulator() {
-        return new AndroidARMEmulator("org.telegram.messenger");
+        return AndroidEmulatorBuilder
+                .for32Bit()
+                .setProcessName("org.telegram.messenger")
+                .addBackendFactory(new DynarmicFactory(true))
+                .addBackendFactory(new KvmFactory(true))
+                .build();
     }
 
     private final AndroidEmulator emulator;
@@ -34,11 +41,7 @@ public class Utilities32 {
 
     private final DvmClass cUtilities;
 
-    static {
-        DynarmicLoader.useDynarmic();
-    }
-
-    private Utilities32() {
+    public Utilities32() {
         emulator = createARMEmulator();
         final Memory memory = emulator.getMemory();
         memory.setLibraryResolver(createLibraryResolver());
@@ -50,7 +53,8 @@ public class Utilities32 {
         new AndroidModule(emulator, vm).register(memory);
 
         vm.setVerbose(true);
-        DalvikModule dm = vm.loadLibrary(new File("unidbg-android/src/test/resources/example_binaries/armeabi-v7a/libtmessages.29.so"), true);
+        File file = new File("src/test/resources/example_binaries/armeabi-v7a/libtmessages.29.so");
+        DalvikModule dm = vm.loadLibrary(file.canRead() ? file : new File("unidbg-android/src/test/resources/example_binaries/armeabi-v7a/libtmessages.29.so"), true);
         dm.callJNI_OnLoad(emulator);
 
         cUtilities = vm.resolveClass("org/telegram/messenger/Utilities");
@@ -59,6 +63,19 @@ public class Utilities32 {
     private void destroy() throws IOException {
         emulator.close();
         System.out.println("destroy");
+    }
+
+    public void test() throws Exception {
+        this.aesCbcEncryptionByteArray();
+        this.aesCtrDecryptionByteArray();
+        this.pbkdf2();
+    }
+
+    @Override
+    protected void tearDown() throws Exception {
+        super.tearDown();
+
+        destroy();
     }
 
     public static void main(String[] args) throws Exception {
@@ -92,7 +109,7 @@ public class Utilities32 {
                 vm.addLocalObject(new ByteArray(vm, key)),
                 vm.addLocalObject(new ByteArray(vm, iv)),
                 0, data.length(), 0);
-        Inspector.inspect(data.getValue(), "aesCtrDecryptionByteArray offset=" + (System.currentTimeMillis() - start) + "ms");
+        Inspector.inspect(data.getValue(), "[" + emulator.getBackend() + "]aesCtrDecryptionByteArray offset=" + (System.currentTimeMillis() - start) + "ms");
     }
 
     private void pbkdf2() {

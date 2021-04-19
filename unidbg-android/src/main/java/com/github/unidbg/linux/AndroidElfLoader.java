@@ -1,6 +1,11 @@
 package com.github.unidbg.linux;
 
-import com.github.unidbg.*;
+import com.github.unidbg.AbstractEmulator;
+import com.github.unidbg.Alignment;
+import com.github.unidbg.Emulator;
+import com.github.unidbg.LibraryResolver;
+import com.github.unidbg.Module;
+import com.github.unidbg.Symbol;
 import com.github.unidbg.arm.ARM;
 import com.github.unidbg.arm.ARMEmulator;
 import com.github.unidbg.file.FileIO;
@@ -9,7 +14,12 @@ import com.github.unidbg.file.linux.IOConstants;
 import com.github.unidbg.hook.HookListener;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.linux.android.ElfLibraryFile;
-import com.github.unidbg.memory.*;
+import com.github.unidbg.memory.MemRegion;
+import com.github.unidbg.memory.Memory;
+import com.github.unidbg.memory.MemoryAllocBlock;
+import com.github.unidbg.memory.MemoryBlock;
+import com.github.unidbg.memory.MemoryBlockImpl;
+import com.github.unidbg.memory.MemoryMap;
 import com.github.unidbg.pointer.UnidbgPointer;
 import com.github.unidbg.spi.AbstractLoader;
 import com.github.unidbg.spi.InitFunction;
@@ -19,7 +29,16 @@ import com.github.unidbg.unix.IO;
 import com.github.unidbg.unix.Thread;
 import com.github.unidbg.unix.UnixSyscallHandler;
 import com.sun.jna.Pointer;
-import net.fornwall.jelf.*;
+import net.fornwall.jelf.ArmExIdx;
+import net.fornwall.jelf.ElfDynamicStructure;
+import net.fornwall.jelf.ElfException;
+import net.fornwall.jelf.ElfFile;
+import net.fornwall.jelf.ElfRelocation;
+import net.fornwall.jelf.ElfSegment;
+import net.fornwall.jelf.ElfSymbol;
+import net.fornwall.jelf.GnuEhFrameHeader;
+import net.fornwall.jelf.MemoizedObject;
+import net.fornwall.jelf.SymbolLocator;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -30,7 +49,14 @@ import unicorn.UnicornConst;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements Memory, Loader {
 
@@ -96,13 +122,6 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
         }
     }
 
-    @Override
-    public File dumpHeap() throws IOException {
-        File outFile = File.createTempFile("heap_0x" + Long.toHexString(HEAP_BASE) + "_", ".dat");
-        dump(UnidbgPointer.pointer(emulator, HEAP_BASE), brk - HEAP_BASE, outFile);
-        return outFile;
-    }
-
     private void initializeTLS(String[] envs) {
         final Pointer thread = allocateStack(0x400); // reserve space for pthread_internal_t
 
@@ -143,14 +162,14 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
         final Pointer argv = allocateStack(0x100);
         assert argv != null;
         argv.setPointer(emulator.getPointerSize(), programNamePointer);
-        argv.setPointer(2 * emulator.getPointerSize(), environ);
-        argv.setPointer(3 * emulator.getPointerSize(), auxv);
+        argv.setPointer(2L * emulator.getPointerSize(), environ);
+        argv.setPointer(3L * emulator.getPointerSize(), auxv);
 
         final UnidbgPointer tls = allocateStack(0x80 * 4); // tls size
         assert tls != null;
         tls.setPointer(emulator.getPointerSize(), thread);
-        this.errno = tls.share(emulator.getPointerSize() * 2);
-        tls.setPointer(emulator.getPointerSize() * 3, argv);
+        this.errno = tls.share(emulator.getPointerSize() * 2L);
+        tls.setPointer(emulator.getPointerSize() * 3L, argv);
 
         if (emulator.is32Bit()) {
             backend.reg_write(ArmConst.UC_ARM_REG_C13_C0_3, tls.peer);
@@ -308,6 +327,7 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
 
         long start = System.currentTimeMillis();
         long bound_high = 0;
+        long align = 0;
         for (int i = 0; i < elfFile.num_ph; i++) {
             ElfSegment ph = elfFile.getProgramHeader(i);
             if (ph.type == ElfSegment.PT_LOAD && ph.mem_size > 0) {
@@ -316,14 +336,17 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
                 if (bound_high < high) {
                     bound_high = high;
                 }
+                if (ph.alignment > align) {
+                    align = ph.alignment;
+                }
             }
         }
 
         ElfDynamicStructure dynamicStructure = null;
 
-        final long baseAlign = emulator.getPageAlign();
+        final long baseAlign = Math.max(emulator.getPageAlign(), align);
         final long load_base = ((mmapBaseAddress - 1) / baseAlign + 1) * baseAlign;
-        long size = emulator.align(0, bound_high).size;
+        long size = ARM.align(0, bound_high, baseAlign).size;
         setMMapBaseAddress(load_base + size);
 
         final List<MemRegion> regions = new ArrayList<>(5);
@@ -339,10 +362,27 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
                     }
 
                     final long begin = load_base + ph.virtual_address;
-                    Alignment alignment = this.mem_map(begin, ph.mem_size, prot, libraryFile.getName());
-                    ph.getPtLoadData().write(pointer(begin));
 
-                    regions.add(new MemRegion(alignment.address, alignment.address + alignment.size, prot, libraryFile, ph.virtual_address));
+                    Alignment check = ARM.align(begin, ph.mem_size, Math.max(emulator.getPageAlign(), ph.alignment));
+                    final int regionSize = regions.size();
+                    MemRegion last = regionSize <= 0 ? null : regions.get(regionSize - 1);
+                    MemRegion overall = null;
+                    if (last != null && check.address >= last.begin && check.address < last.end) {
+                        overall = last;
+                    }
+                    if (overall != null) {
+                        long overallSize = overall.end - check.address;
+                        backend.mem_protect(check.address, overallSize, overall.perms | prot);
+                        if (ph.mem_size > overallSize) {
+                            Alignment alignment = this.mem_map(begin + overallSize, ph.mem_size - overallSize, prot, libraryFile.getName(), Math.max(emulator.getPageAlign(), ph.alignment));
+                            regions.add(new MemRegion(alignment.address, alignment.address + alignment.size, prot, libraryFile, ph.virtual_address));
+                        }
+                    } else {
+                        Alignment alignment = this.mem_map(begin, ph.mem_size, prot, libraryFile.getName(), Math.max(emulator.getPageAlign(), ph.alignment));
+                        regions.add(new MemRegion(alignment.address, alignment.address + alignment.size, prot, libraryFile, ph.virtual_address));
+                    }
+
+                    ph.getPtLoadData().writeTo(pointer(begin));
                     break;
                 case ElfSegment.PT_DYNAMIC:
                     dynamicStructure = ph.getDynamicStructure();
@@ -512,7 +552,7 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
                     throw new IllegalStateException("DT_PREINIT_ARRAY is null");
                 }
                 for (int i = 0; i < count; i++) {
-                    Pointer func = pointer.getPointer(i * emulator.getPointerSize());
+                    Pointer func = pointer.getPointer((long) i * emulator.getPointerSize());
                     if (func != null) {
                         initFunctionList.add(new AbsoluteInitFunction(load_base, soName, ((UnidbgPointer) func).peer));
                     }
@@ -533,7 +573,7 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
                     throw new IllegalStateException("DT_INIT_ARRAY is null");
                 }
                 for (int i = 0; i < count; i++) {
-                    Pointer func = pointer.getPointer(i * emulator.getPointerSize());
+                    Pointer func = pointer.getPointer((long) i * emulator.getPointerSize());
                     if (func != null) {
                         initFunctionList.add(new AbsoluteInitFunction(load_base, soName, ((UnidbgPointer) func).peer));
                     }
@@ -605,9 +645,9 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
 
     private int get_segment_protection(int flags) {
         int prot = Unicorn.UC_PROT_NONE;
-        if ((flags & /* PF_R= */4) != 0) prot |= Unicorn.UC_PROT_READ;
-        if ((flags & /* PF_W= */2) != 0) prot |= Unicorn.UC_PROT_WRITE;
-        if ((flags & /* PF_X= */1) != 0) prot |= Unicorn.UC_PROT_EXEC;
+        if ((flags & ElfSegment.PF_R) != 0) prot |= Unicorn.UC_PROT_READ;
+        if ((flags & ElfSegment.PF_W) != 0) prot |= Unicorn.UC_PROT_WRITE;
+        if ((flags & ElfSegment.PF_X) != 0) prot |= Unicorn.UC_PROT_EXEC;
         return prot;
     }
 
@@ -620,6 +660,7 @@ public class AndroidElfLoader extends AbstractLoader<AndroidFileIO> implements M
         }
     }
 
+    private static final long HEAP_BASE = 0x8048000;
     private long brk;
 
     @Override

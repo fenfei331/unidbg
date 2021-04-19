@@ -3,8 +3,10 @@ package com.github.unidbg.arm;
 import com.github.unidbg.Emulator;
 import com.github.unidbg.Family;
 import com.github.unidbg.Module;
+import com.github.unidbg.Utils;
 import com.github.unidbg.arm.backend.Backend;
 import com.github.unidbg.arm.backend.BackendException;
+import com.github.unidbg.debugger.DebugRunnable;
 import com.github.unidbg.debugger.Debugger;
 import com.github.unidbg.memory.Memory;
 import com.github.unidbg.pointer.UnidbgPointer;
@@ -17,7 +19,6 @@ import org.apache.commons.codec.binary.Hex;
 import unicorn.ArmConst;
 
 import java.util.Scanner;
-import java.util.concurrent.Callable;
 
 class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
 
@@ -26,18 +27,21 @@ class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
     }
 
     @Override
-    protected final void loop(Emulator<?> emulator, long address, int size, Callable<?> callable) throws Exception {
+    protected final void loop(Emulator<?> emulator, long address, int size, DebugRunnable<?> runnable) throws Exception {
         Backend backend = emulator.getBackend();
         boolean thumb = ARM.isThumb(backend);
         long nextAddress = 0;
-        if (address > 0) {
-            System.out.println("debugger break at: 0x" + Long.toHexString(address));
-            try {
+
+        try {
+            if (address != -1) {
+                System.out.println("debugger break at: 0x" + Long.toHexString(address));
                 emulator.showRegs();
-                nextAddress = disassemble(emulator, address, size, thumb);
-            } catch (BackendException e) {
-                e.printStackTrace();
             }
+            if (address > 0) {
+                nextAddress = disassemble(emulator, address, size, thumb);
+            }
+        } catch (BackendException e) {
+            e.printStackTrace();
         }
 
         Scanner scanner = new Scanner(System.in);
@@ -48,10 +52,11 @@ class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
                     showHelp();
                     continue;
                 }
-                if ("run".equals(line) && callable != null) {
+                if (line.startsWith("run") && runnable != null) {
                     try {
                         callbackRunning = true;
-                        callable.call();
+                        String[] args = line.substring(3).trim().split("\\s+");
+                        runnable.runWithArgs(args);
                     } finally {
                         callbackRunning = false;
                     }
@@ -74,13 +79,8 @@ class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
                     try {
                         if (tokens.length >= 2) {
                             command = tokens[0];
-                            int radix = 10;
                             String str = tokens[1];
-                            if (str.startsWith("0x")) {
-                                str = str.substring(2);
-                                radix = 16;
-                            }
-                            length = Integer.parseInt(str, radix);
+                            length = (int) Utils.parseNumber(str);
                         }
                     } catch(NumberFormatException ignored) {}
                     StringType stringType = null;
@@ -158,13 +158,8 @@ class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
                     int value;
                     try {
                         command = tokens[0];
-                        int radix = 10;
                         String str = tokens[1];
-                        if (str.startsWith("0x")) {
-                            str = str.substring(2);
-                            radix = 16;
-                        }
-                        value = (int) Long.parseLong(str, radix);
+                        value = (int) Utils.parseNumber(str);
                     } catch(NumberFormatException e) {
                         e.printStackTrace();
                         continue;
@@ -252,7 +247,7 @@ class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
                     System.out.println("Add breakpoint: 0x" + Long.toHexString(addr) + (module == null ? "" : (" in " + module.name + " [0x" + Long.toHexString(addr - module.base) + "]")));
                     continue;
                 }
-                if(handleCommon(backend, line, address, size, nextAddress, callable)) {
+                if(handleCommon(backend, line, address, size, nextAddress, runnable)) {
                     break;
                 }
             } catch (RuntimeException | DecoderException e) {
@@ -274,6 +269,7 @@ class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
         System.out.println("shr hex: search readable heap");
         System.out.println("shx hex: search executable heap");
         System.out.println();
+        System.out.println("nb: break at next block");
         System.out.println("s|si: step into");
         System.out.println("s[decimal]: execute specified amount instruction");
         System.out.println("s(blx): execute util BLX mnemonic, low performance");
@@ -295,12 +291,14 @@ class SimpleARMDebugger extends AbstractARMDebugger implements Debugger {
         System.out.println("where: show java stack trace");
         System.out.println();
         System.out.println("trace [begin end]: Set trace instructions");
+        System.out.println("traceRead [begin end]: Set trace memory read");
+        System.out.println("traceWrite [begin end]: Set trace memory write");
         System.out.println("vm: view loaded modules");
         System.out.println("vbs: view breakpoints");
         System.out.println("d|dis: show disassemble");
         System.out.println("d(0x): show disassemble at specify address");
         System.out.println("stop: stop emulation");
-        System.out.println("run: run test");
+        System.out.println("run [arg]: run test");
 
         if (emulator.getFamily() == Family.iOS && !emulator.isRunning()) {
             System.out.println("dump [class name]: dump objc class");

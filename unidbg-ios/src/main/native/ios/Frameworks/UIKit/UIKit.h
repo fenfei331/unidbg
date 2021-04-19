@@ -70,6 +70,7 @@ typedef enum UIViewAutoresizing : NSUInteger {
 - (id)initWithFrame:(CGRect)rect;
 - (void)setAccessibilityViewIsModal:(BOOL)flag;
 - (void)setOverrideUserInterfaceStyle:(UIUserInterfaceStyle)style;
+- (CGPoint)convertPoint:(CGPoint)point fromView:(UIView *)view;
 @end
 
 @interface UIViewController : UIResponder
@@ -96,6 +97,7 @@ typedef enum UIStatusBarStyle : NSInteger {
 
 @property(nonatomic, getter=isStatusBarHidden) BOOL statusBarHidden;
 @property(nonatomic) UIStatusBarStyle statusBarStyle;
+@property(nonatomic, getter=isIgnoringInteractionEvents) BOOL ignoringInteractionEvents;
 
 + (UIApplication *)sharedApplication;
 
@@ -110,6 +112,8 @@ typedef enum UIStatusBarStyle : NSInteger {
 - (void)setMinimumBackgroundFetchInterval:(NSTimeInterval)minimumBackgroundFetchInterval;
 
 - (NSArray *)windows;
+
+- (void)beginIgnoringInteractionEvents;
 
 @end
 
@@ -158,6 +162,7 @@ typedef enum UIDeviceBatteryState : NSInteger {
 @end
 
 @interface UIScreen : NSObject
+@property(nonatomic, readonly, getter=isCaptured) BOOL captured;
 + (UIScreen *)mainScreen;
 - (CGRect)bounds;
 - (CGFloat)scale;

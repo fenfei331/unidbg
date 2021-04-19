@@ -1,18 +1,22 @@
 package com.github.unidbg.android.ida;
 
+import com.github.unidbg.AbstractEmulator;
 import com.github.unidbg.Emulator;
 import com.github.unidbg.LibraryResolver;
 import com.github.unidbg.Module;
 import com.github.unidbg.Symbol;
 import com.github.unidbg.arm.HookStatus;
-import com.github.unidbg.arm.backend.dynarmic.DynarmicLoader;
 import com.github.unidbg.arm.context.RegisterContext;
 import com.github.unidbg.debugger.ida.Utils;
 import com.github.unidbg.file.FileResult;
 import com.github.unidbg.file.IOResolver;
 import com.github.unidbg.file.linux.AndroidFileIO;
 import com.github.unidbg.hook.ReplaceCallback;
-import com.github.unidbg.hook.hookzz.*;
+import com.github.unidbg.hook.hookzz.HookEntryInfo;
+import com.github.unidbg.hook.hookzz.HookZz;
+import com.github.unidbg.hook.hookzz.HookZzArm64RegisterContext;
+import com.github.unidbg.hook.hookzz.IHookZz;
+import com.github.unidbg.hook.hookzz.WrapCallback;
 import com.github.unidbg.hook.xhook.IxHook;
 import com.github.unidbg.linux.android.AndroidResolver;
 import com.github.unidbg.linux.android.XHookImpl;
@@ -34,10 +38,6 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class AndroidServer64Test implements IOResolver<AndroidFileIO> {
-
-    static {
-        DynarmicLoader.useDynarmic();
-    }
 
     public static void main(String[] args) throws IOException {
         new AndroidServer64Test().test();
@@ -76,7 +76,7 @@ public class AndroidServer64Test implements IOResolver<AndroidFileIO> {
     private final Module module;
     private final File executable;
 
-    private AndroidServer64Test() throws IOException {
+    private AndroidServer64Test() {
         executable = new File("unidbg-android/src/test/resources/example_binaries/ida/android_server64_7.4");
         emulator = new MyAndroidARM64Emulator(executable);
         emulator.getSyscallHandler().addIOResolver(this);
@@ -213,7 +213,7 @@ public class AndroidServer64Test implements IOResolver<AndroidFileIO> {
             }
         });
 
-        Logger.getLogger("com.github.unidbg.AbstractEmulator").setLevel(Level.DEBUG);
+        Logger.getLogger(AbstractEmulator.class).setLevel(Level.DEBUG);
 //        emulator.attach().addBreakPoint(module, 0x02af44);
 //        emulator.traceWrite(0x40314530L, 0x40314530L + 3);
 

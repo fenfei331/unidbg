@@ -2,7 +2,11 @@ package com.github.unidbg.ios;
 
 import com.github.unidbg.Emulator;
 import com.github.unidbg.LibraryResolver;
+import com.github.unidbg.arm.ARMEmulator;
 import com.github.unidbg.arm.HookStatus;
+import com.github.unidbg.arm.backend.HypervisorFactory;
+import com.github.unidbg.arm.backend.KvmFactory;
+import com.github.unidbg.file.ios.DarwinFileIO;
 import com.github.unidbg.hook.HookContext;
 import com.github.unidbg.hook.ReplaceCallback;
 import com.github.unidbg.hook.substrate.ISubstrate;
@@ -16,7 +20,7 @@ import com.sun.jna.Pointer;
 
 import java.io.File;
 
-public class ClassDumpTest extends EmulatorTest<DarwinARMEmulator> {
+public class ClassDumpTest extends EmulatorTest<ARMEmulator<DarwinFileIO>> {
 
     @Override
     protected LibraryResolver createLibraryResolver() {
@@ -24,14 +28,15 @@ public class ClassDumpTest extends EmulatorTest<DarwinARMEmulator> {
     }
 
     @Override
-    protected DarwinARMEmulator createARMEmulator() {
-        return new DarwinARMEmulator(new File("target/rootfs/classdump"));
+    protected ARMEmulator<DarwinFileIO> createARMEmulator() {
+        return DarwinEmulatorBuilder.for32Bit()
+                .setRootDir(new File("target/rootfs/classdump"))
+                .addBackendFactory(new HypervisorFactory(true))
+                .addBackendFactory(new KvmFactory(true))
+                .build();
     }
 
-    public void testIgnore() {
-    }
-
-    private void processClassDump() {
+    public void testClassDump() {
         MachOLoader loader = (MachOLoader) emulator.getMemory();
         loader.setObjcRuntime(true);
         IClassDumper classDumper = ClassDumper.getInstance(emulator);
@@ -67,7 +72,7 @@ public class ClassDumpTest extends EmulatorTest<DarwinARMEmulator> {
         System.out.println(objcClass);
 
         assertTrue(oClassDump.getMeta().isMetaClass());
-        System.out.println("className=" + oClassDump.getName() + ", metaClassName=" + oClassDump.getMeta().getName());
+        System.out.println("[" + emulator.getBackend() + "]className=" + oClassDump.getName() + ", metaClassName=" + oClassDump.getMeta().getName());
 
         ObjcObject str = oClassDump.callObjc("my_dump_class:", "NSDictionary");
         System.out.println(str.getDescription());
@@ -78,7 +83,7 @@ public class ClassDumpTest extends EmulatorTest<DarwinARMEmulator> {
     public static void main(String[] args) throws Exception {
         ClassDumpTest test = new ClassDumpTest();
         test.setUp();
-        test.processClassDump();
+        test.testClassDump();
         test.tearDown();
     }
 

@@ -4,6 +4,7 @@ import com.github.unidbg.Alignment;
 import com.github.unidbg.Emulator;
 import com.github.unidbg.Module;
 import com.github.unidbg.Symbol;
+import com.github.unidbg.arm.ARM;
 import com.github.unidbg.memory.MemRegion;
 import com.github.unidbg.memory.Memory;
 import com.github.unidbg.pointer.UnidbgPointer;
@@ -11,12 +12,21 @@ import com.github.unidbg.spi.InitFunction;
 import com.github.unidbg.utils.Inspector;
 import com.github.unidbg.virtualmodule.VirtualSymbol;
 import com.sun.jna.Pointer;
-import net.fornwall.jelf.*;
+import net.fornwall.jelf.ArmExIdx;
+import net.fornwall.jelf.ElfSymbol;
+import net.fornwall.jelf.GnuEhFrameHeader;
+import net.fornwall.jelf.MemoizedObject;
+import net.fornwall.jelf.SymbolLocator;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class LinuxModule extends Module {
 
@@ -36,7 +46,7 @@ public class LinuxModule extends Module {
         });
         UnidbgPointer first = list.get(0);
         UnidbgPointer last = list.get(list.size() - 1);
-        Alignment alignment = emulator.align(first.peer, last.peer - first.peer);
+        Alignment alignment = ARM.align(first.peer, last.peer - first.peer, emulator.getPageAlign());
         final long base = alignment.address;
         final long size = alignment.size;
 

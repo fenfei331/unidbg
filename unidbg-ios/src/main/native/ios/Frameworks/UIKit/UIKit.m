@@ -157,6 +157,9 @@ const CGRect g_frame = { 0, 0, 768, 1024 };
 }
 - (void)addSubview:(UIView *)view {
 }
+- (CGPoint)convertPoint:(CGPoint)point fromView:(UIView *)view {
+  return point;
+}
 @end
 
 @implementation UIWindow
@@ -223,6 +226,10 @@ const CGRect g_frame = { 0, 0, 768, 1024 };
 
 - (NSArray *)windows {
     return [NSArray array];
+}
+
+- (void)beginIgnoringInteractionEvents {
+  self.ignoringInteractionEvents = true;
 }
 
 @end

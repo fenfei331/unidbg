@@ -1,13 +1,16 @@
 package com.github.unidbg.spi;
 
-import com.github.unidbg.*;
+import com.github.unidbg.Alignment;
+import com.github.unidbg.Emulator;
+import com.github.unidbg.LibraryResolver;
+import com.github.unidbg.Module;
+import com.github.unidbg.ModuleListener;
 import com.github.unidbg.arm.ARM;
 import com.github.unidbg.arm.ARMEmulator;
 import com.github.unidbg.arm.backend.Backend;
 import com.github.unidbg.file.NewFileIO;
 import com.github.unidbg.hook.HookListener;
 import com.github.unidbg.memory.Memory;
-import com.github.unidbg.memory.MemoryBlock;
 import com.github.unidbg.memory.MemoryMap;
 import com.github.unidbg.pointer.UnidbgPointer;
 import com.github.unidbg.unix.UnixEmulator;
@@ -24,7 +27,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 public abstract class AbstractLoader<T extends NewFileIO> implements Memory, Loader {
 
@@ -303,14 +311,6 @@ public abstract class AbstractLoader<T extends NewFileIO> implements Memory, Loa
         }
     }
 
-    @Override
-    public final File dumpStack() throws IOException {
-        UnidbgPointer sp = UnidbgPointer.register(emulator, emulator.is32Bit() ? ArmConst.UC_ARM_REG_SP : Arm64Const.UC_ARM64_REG_SP);
-        File outFile = File.createTempFile("stack_0x" + Long.toHexString(sp.peer) + "_", ".dat");
-        dump(sp, STACK_BASE - sp.peer, outFile);
-        return outFile;
-    }
-
     protected final void dump(Pointer pointer, long size, File outFile) throws IOException {
         FileOutputStream outputStream = null;
         try {
@@ -331,13 +331,8 @@ public abstract class AbstractLoader<T extends NewFileIO> implements Memory, Loa
         }
     }
 
-    @Override
-    public final MemoryBlock malloc(int length) {
-        return malloc(length, true);
-    }
-
-    protected final Alignment mem_map(long address, long size, int prot, String libraryName) {
-        Alignment alignment = emulator.align(address, size);
+    protected final Alignment mem_map(long address, long size, int prot, String libraryName, long align) {
+        Alignment alignment = ARM.align(address, size, align);
 
         if (log.isDebugEnabled()) {
             log.debug("[" + libraryName + "]0x" + Long.toHexString(alignment.address) + " - 0x" + Long.toHexString(alignment.address + alignment.size) + ", size=0x" + Long.toHexString(alignment.size) + ", prot=" + prot);
@@ -366,9 +361,9 @@ public abstract class AbstractLoader<T extends NewFileIO> implements Memory, Loa
     }
 
     @Override
-    public final Module findModule(String soName) {
+    public final Module findModule(String name) {
         for (Module module : getLoadedModules()) {
-            if (module.name.equals(soName)) {
+            if (module.name.equals(name)) {
                 return module;
             }
         }

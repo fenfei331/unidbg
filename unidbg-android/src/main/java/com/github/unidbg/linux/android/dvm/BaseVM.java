@@ -3,6 +3,7 @@ package com.github.unidbg.linux.android.dvm;
 import com.github.unidbg.Emulator;
 import com.github.unidbg.Module;
 import com.github.unidbg.linux.android.ElfLibraryFile;
+import com.github.unidbg.linux.android.ElfLibraryRawFile;
 import com.github.unidbg.linux.android.dvm.api.Signature;
 import com.github.unidbg.linux.android.dvm.apk.Apk;
 import com.github.unidbg.linux.android.dvm.apk.ApkFactory;
@@ -16,7 +17,12 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 public abstract class BaseVM implements VM, DvmClassFactory {
 
@@ -150,6 +156,15 @@ public abstract class BaseVM implements VM, DvmClassFactory {
         }
     }
 
+    final void checkVersion(int version) {
+        if (version != JNI_VERSION_1_1 &&
+                version != JNI_VERSION_1_2 &&
+                version != JNI_VERSION_1_4 &&
+                version != JNI_VERSION_1_6) {
+            throw new IllegalStateException("Illegal JNI version: 0x" + Integer.toHexString(version));
+        }
+    }
+
     private class ApkLibraryFile implements LibraryFile {
         private final Apk apk;
         private final String soName;
@@ -175,10 +190,6 @@ public abstract class BaseVM implements VM, DvmClassFactory {
         public LibraryFile resolveLibrary(Emulator<?> emulator, String soName) {
             byte[] libData = loadLibraryData(apk, soName);
             return libData == null ? null : new ApkLibraryFile(this.apk, soName, libData, packageName);
-        }
-        @Override
-        public byte[] readToByteArray() {
-            return soData;
         }
         @Override
         public ByteBuffer mapBuffer() {
@@ -211,6 +222,15 @@ public abstract class BaseVM implements VM, DvmClassFactory {
         }
 
         Module module = emulator.getMemory().load(libraryFile, forceCallInit);
+        return new DalvikModule(this, module);
+    }
+
+    @Override
+    public final DalvikModule loadLibrary(String libname, byte[] raw, boolean forceCallInit) {
+        if (raw == null || raw.length == 0) {
+            throw new IllegalArgumentException();
+        }
+        Module module = emulator.getMemory().load(new ElfLibraryRawFile(libname, raw), forceCallInit);
         return new DalvikModule(this, module);
     }
 

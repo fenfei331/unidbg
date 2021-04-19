@@ -3,13 +3,10 @@ package com.github.unidbg.ios;
 import com.github.unidbg.Emulator;
 import com.github.unidbg.Utils;
 import com.github.unidbg.spi.LibraryFile;
-import org.apache.commons.io.FileUtils;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 
 public class MachOLibraryFile implements LibraryFile {
 
@@ -26,7 +23,7 @@ public class MachOLibraryFile implements LibraryFile {
 
     @Override
     public String getMapRegionName() {
-        return "/usr/lib/" + getName();
+        return "/vendor/lib/" + getName();
     }
 
     @Override
@@ -36,18 +33,13 @@ public class MachOLibraryFile implements LibraryFile {
     }
 
     @Override
-    public byte[] readToByteArray() throws IOException {
-        return FileUtils.readFileToByteArray(file);
-    }
-
-    @Override
     public ByteBuffer mapBuffer() throws IOException {
         return Utils.mapBuffer(file);
     }
 
     @Override
     public String getPath() {
-        return "/usr/lib";
+        return "/vendor/lib";
     }
 
 }
