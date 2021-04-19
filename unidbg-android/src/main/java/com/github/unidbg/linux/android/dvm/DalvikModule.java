@@ -36,7 +36,8 @@ public class DalvikModule {
                     log.debug("Call [" + module.name + "]JNI_OnLoad finished: version=0x" + Integer.toHexString(version) + ", offset=" + (System.currentTimeMillis() - start) + "ms");
                 }
 
-                vm.checkVersion(version);
+                // modify fenfei
+                // vm.checkVersion(version);
             } finally {
                 vm.deleteLocalRefs();
             }
